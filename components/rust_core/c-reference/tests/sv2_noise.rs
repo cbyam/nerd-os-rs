@@ -436,8 +436,8 @@ fn handshake_failures_match_reference() {
     }
 }
 
-/// Finding #18: the reference takes a write timeout (0) or a partial write
-/// for success; the current code fails on a timeout and writes the rest.
+/// Writes: a write timeout (0) is an error, and a partial write is followed
+/// by the rest (the reference returns after the first call).
 #[test]
 fn send_handles_timeouts_and_partial_writes() {
     let secp = Context::new(&[9; 32]).unwrap();
@@ -475,8 +475,8 @@ fn send_handles_timeouts_and_partial_writes() {
     }
 }
 
-/// Finding #19: with an authority key and a known time, the certificate must
-/// be valid at that time; the reference never checked the period.
+/// With an authority key and a known time, the certificate must be valid at
+/// that time (the reference does not check the period).
 #[test]
 fn certificate_validity_period_is_checked() {
     let secp = Context::new(&[9; 32]).unwrap();

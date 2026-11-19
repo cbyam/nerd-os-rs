@@ -46,6 +46,3 @@ release/
 esp-miner-*.bin
 # flashed images in the repo root (flash scripts)
 /*.bin
-
-# Defects found in the legacy C code (kept locally, not published)
-docs/legacy-c-findings.md

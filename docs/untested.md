@@ -7,37 +7,37 @@ what a test would need. When an entry has been tested, delete it.
 
 ## Stratum
 
-- **TLS pool connection** (#85, `src/stratum_transport.rs`, `Kind::Tls`).
+- **TLS pool connection** (`src/stratum_transport.rs`, `Kind::Tls`).
   No pool with `stratum+ssl` was configured, so only TCP (SV1) and Noise
   (SV2) ran on hardware. Needs a TLS pool, for example a TLS port of
   public-pool, with `stratumtls` set.
-- **Failover switching** (#86, `src/pool_manager.rs`). Only dual pool mode
+- **Failover switching** (`src/pool_manager.rs`). Only dual pool mode
   ran on the Q1373. Unit tests cover the switching to the secondary pool
   through the reconnect timer and the switching back when the primary
   returns. Needs failover mode with a primary that goes away, for example
   a `socat` relay to ckpool that is stopped and started again.
-- **Coinbase verification fault** (#86). This raises the board error when
+- **Coinbase verification fault**. This raises the board error when
   all configured pools are blocked by the verification. Needs a pool
   whose coinbase does not pay the configured address, or a deliberately
   wrong user address with verification mode 1.
 
 ## Display / system task
 
-- **Error overlay** (#87, `src/system.rs`). It is shown when the board
+- **Error overlay** (`src/system.rs`). It is shown when the board
   error is set and hidden again when it clears. Needs a board error, for
   example the coinbase verification fault above, or a lowered overheat
   limit (only with the user's OK).
-- **Found block overlay** (#87). It is shown when the found-block counter
+- **Found block overlay**. It is shown when the found-block counter
   increases. Needs a found block.
-- **CAN slave label** (#87). The display shows "CAN ID: n" or "CAN: ..."
+- **CAN slave label**. The display shows "CAN ID: n" or "CAN: ..."
   instead of the IP address. Needs a board in CAN slave mode.
-- **Boards without a hashrate counter** (#87). The current hashrate comes
+- **Boards without a hashrate counter**. The current hashrate comes
   from the 10 min share average on these boards. Only the Q1373, which has
   a counter, was tested after S4.
 
 ## Boards
 
-- **Boards other than the Q1373 and the NerdAxeGaia** (#88, `src/board.rs`).
+- **Boards other than the Q1373 and the NerdAxeGaia** (`src/board.rs`).
   All twelve boards build, and the init sequence on the Q1373 and the Gaia
   is the same, line for line, as before. Not run on hardware:
   - NerdQAxe+ and NerdOCTAXE+: control pins on GPIOs, chip temperatures
@@ -53,34 +53,34 @@ what a test would need. When an entry has been tested, delete it.
 
   Each needs a flash and a comparison with the previous firmware (log of
   the init sequence, `/api/system/info`).
-- **Ethernet HAT detection on the NerdQAxe family** (#88): the W5500 probe
+- **Ethernet HAT detection on the NerdQAxe family**: the W5500 probe
   on the HAT pins, skipped when the CAN extension or a TMP451 mux uses
   them. Needs a NerdQAxe with an ethernet HAT.
-- **CAN extension detection and slave pin on the NerdQAxe+ family** (#88).
+- **CAN extension detection and slave pin on the NerdQAxe+ family**.
   Needs the CAN HAT.
 
 ## CAN
 
-- **CAN master receive** (#41) and **CAN slave protocol**
-  (#44). Only differential tests ran. Needs a CAN setup with a
+- **CAN master receive** and **CAN slave protocol**.
+  Only differential tests ran. Needs a CAN setup with a
   master and at least one slave board.
 
 ## Power / boards
 
-- **rev7 TPS546 path** (#51). Only the NerdAxe path ran on
+- **rev7 TPS546 path**. Only the NerdAxe path ran on
   hardware (Gamma). The rev7 path is covered by differential tests only.
   Needs a NerdQAxe++ rev7.
 
 ## OTA
 
-- **Factory OTA with `keep_config=false`** (#94, `src/ota_factory_task.rs`):
+- **Factory OTA with `keep_config=false`** (`src/ota_factory_task.rs`):
   the NVS erase after the update. Never run on the test boards (it wipes
   the configuration). The update itself with `keep_config=true` ran on the
   Q1373 (GitHub release v1.1.2).
 
 ## Network
 
-- **Captive portal DNS from an access point client** (#74, `src/dns.rs`).
+- **Captive portal DNS from an access point client** (`src/dns.rs`).
   This was tested with `dig` over the LAN, where the server also answers
   with 192.168.4.1. Needs a phone or laptop on the device's access point
   (no WiFi configured).
