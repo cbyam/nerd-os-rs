@@ -34,7 +34,7 @@ bring a second copy of `std` into the firmware.
 ## Toolchain
 
 Xtensa needs Espressif's Rust fork (toolchain `esp`, selected by
-`rust-toolchain.toml`). The Docker image in `docker-rust/` installs it. To install
+`rust-toolchain.toml`). The Docker image in `docker/` installs it. To install
 it on the host:
 
 ```sh

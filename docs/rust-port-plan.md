@@ -8,7 +8,7 @@ Constraints, which apply to the whole port:
 
 - Rust `std` on ESP-IDF. No Embassy or esp-hal.
 - The LVGL display code stays in C/C++.
-- Builds run in Docker (`docker-rust/`).
+- Builds run in Docker (`docker/`).
 
 ## Approach
 
@@ -145,5 +145,5 @@ built on it, and ChaCha20-Poly1305 is the RustCrypto crate. The step cost
   replaced, how it was verified, the change in firmware size, any new C
   findings and what is left open.
 - Merge requirements: host tests green, clippy and rustfmt clean, and the
-  firmware builds in `docker-rust`. A hardware test is noted in the PR. Until
+  firmware builds in `docker/`. A hardware test is noted in the PR. Until
   it is done, the PR says "hardware test pending".

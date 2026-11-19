@@ -1,236 +1,204 @@
 [![](https://dcbadge.vercel.app/api/server/3E8ca2dkcC)](https://discord.gg/3E8ca2dkcC)
 
-# ESP-Miner-Nerdaxe version
+# NerdOS (Rust)
 
-| Supported Targets | ESP32-S3              |
-| ----------------- | --------------------- |
-| Required Platform | >= ESP-IDF v5.3.X       |
-| ----------------- | --------------------- |
+Firmware for the NerdAxe and NerdQAxe family of Bitcoin miners (ESP32-S3,
+ESP-IDF 5.3). The firmware core is written in Rust: Stratum v1 and v2, pool
+management, the job pipeline, ASIC and board drivers, power and fan control,
+the HTTP API, networking, OTA and boot. The LVGL display and the ASIC self
+test stay C/C++. The web UI is AxeOS-based.
 
-This is a forked version from the NerdAxe miner that was modified for using on the [NerdQAxe+](https://github.com/shufps/qaxe).
+This is the Rust line of the
+[ESP-Miner-NerdQAxePlus](https://github.com/shufps/ESP-Miner-NerdQAxePlus)
+firmware. Both lines share the partition layout and the settings stored on the
+device.
 
-Credits to the devs:
-- BitAxe devs on OSMU: @skot/ESP-Miner, @ben and @jhonny
-- NerdAxe dev @BitMaker
+## Supported boards
 
+| Device | `BOARD` | ASIC |
+| --- | --- | --- |
+| NerdAxe | `NERDAXE` | 1× BM1366 |
+| NerdAxe Gamma | `NERDAXEGAMMA` | 1× BM1370 |
+| NerdAxe Gaia | `NERDAXEGAIA` | 1× BM1373 |
+| NerdQAxe+ | `NERDQAXEPLUS` | 4× BM1368 |
+| NerdQAxe++ | `NERDQAXEPLUS2` | 4× BM1370 |
+| NerdQX | `NERDQX` | 4× BM1370 |
+| NerdHaxe-γ | `NERDHAXEGAMMA` | 6× BM1370 |
+| NerdOCTAXE+ | `NERDOCTAXEPLUS` | 8× BM1368 |
+| NerdOCTAXE-γ | `NERDOCTAXEGAMMA` | 8× BM1370 |
+| NerdEKO | `NERDEKO` | 12× BM1370 |
+| Q1370 | `Q1370` | 4× BM1370 |
+| Q1373 | `Q1373` | 4× BM1373 |
 
-## How to flash/update firmware
+## Features
 
-The newest releases are always here:
+- Stratum v1 and Stratum v2 (encrypted Noise connection), optional TLS for v1
+- Primary and fallback pool, or dual-pool mining with a configurable balance
+- Coinbase verification: checks that the pool pays to your address
+- Web UI and REST API ([docs/API.md](docs/API.md)), live log over WebSocket
+- Firmware updates from the web UI (GitHub releases or file upload)
+- Optional OTP (TOTP) protection for settings and updates
+- WiFi with a setup access point (captive portal); Ethernet on boards with a
+  W5500
+- InfluxDB telemetry with a Grafana dashboard ([monitoring/](monitoring/))
+- Discord webhook alerts (watchdog, block found)
+- Fan control: manual, automatic, or PID towards a target temperature
 
-https://github.com/shufps/nerd-os-rs/releases
+## Installing and updating
 
-### Recommended Method: The Webflasher
+### Web flasher (recommended)
 
-The [Webflasher](https://shufps.github.io/nerdqaxe-web-flasher/) (modified fork of the great [Bitaxe Webflasher](https://github.com/bitaxeorg/bitaxe-web-flasher) by [Wantclue](https://github.com/WantClue)) is the easiest method of updating all Nerd*axe variants.
+The [web flasher](https://shufps.github.io/nerdqaxe-web-flasher/) flashes the
+releases of this repository from the browser over USB. It is also the way to
+switch between this firmware and the C/C++ line.
 
 [<img src="https://github.com/user-attachments/assets/4168f23a-bfe7-4536-91e3-7af6df9a203a" style="border:5px solid red;width:200px">](https://shufps.github.io/nerdqaxe-web-flasher/)
 
-It uses the official releases published on this repository and is always up-to-date.
+### Updates from the web UI
 
-### Other Methods
+A running device updates itself from the **System** page: either directly from
+the [releases](https://github.com/shufps/nerd-os-rs/releases) of this
+repository or with an uploaded `esp-miner.bin` / `www.bin`. The GitHub
+updater only offers releases of this repository.
 
-#### Clone repository and prepare config
+### Flashing a release with a preset configuration
 
-First you need to clone the repository and create a local copy of the config file:
+Each release has a factory image per board (`esp-miner-factory-<board>-<version>.bin`).
+With [bitaxetool](https://pypi.org/project/bitaxetool/) it can be flashed
+together with a configuration (WiFi, pools, ...), here via the Docker image:
 
 ```bash
-# clone repository
 git clone --recursive https://github.com/shufps/nerd-os-rs
-
-# change into the cloned repository
 cd nerd-os-rs
+cp config.cvs.example config.cvs   # then edit WiFi, pool, ...
 
-# copy the example config
-cp config.cvs.example config.cvs
+./docker/bitaxetool.sh --config config.cvs \
+    --firmware esp-miner-factory-NerdQAxe++-<version>.bin -p /dev/ttyACM0
 ```
 
-Then you can edit the fields like `stratumurl` and so on.
+Hold the `boot` button while resetting the device to put it into download mode
+if flashing does not start.
 
-#### Bitaxetool
+## Building
 
-After the changes on the `config.cvs` files are done, you use the `bitaxetool` to flash factory binary and the config onto the device.
+Builds run in Docker only; nothing besides Docker is needed on the host. The
+image [`shufps/esp-idf-builder-rs:5.3.6`](https://hub.docker.com/r/shufps/esp-idf-builder-rs)
+contains ESP-IDF 5.3.6, the Rust Xtensa toolchain, Node.js for the web UI,
+`esptool.py`, `bitaxetool` and `nvs_partition_gen.py`. The scripts in
+[`docker/`](docker/) pull it on first use; `./docker/build_docker.sh` builds
+it locally from [`docker/Dockerfile`](docker/Dockerfile) instead.
 
-To switch it into bootload mode, reset the device with presset `boot` button.
-
-```
-bitaxetool --config ./config.cvs --firmware esp-miner-factory-NERDQAXEPLUS-v1.0.10.bin
-
-```
-
-
-## How to build firmware
-
-### Using Docker
-
-Docker containers allow to use the toolchain without installing `esp-idf` or `Node 20.x` on the system.
-
-#### 0. TL;DR - `esp-miner.bin`, `www.bin`
 ```bash
-
-# only once
-cd docker
-./build_docker.sh
-cd ..
-
-# only needed if you cloned without --recursive
+git clone --recursive https://github.com/shufps/nerd-os-rs
+cd nerd-os-rs
+# if cloned without --recursive:
 git submodule update --init --recursive
 
-export BOARD="NERDQAXEPLUS2"
+export BOARD=NERDQAXEPLUS2      # see "Supported boards"
 ./docker/idf.sh set-target esp32s3
-
-# after each change on the source code
 ./docker/idf.sh build
 ```
 
-Afterwards you will have a `esp-miner.bin` and `www.bin` in your `build` directory.
+The results are in `build/`: `esp-miner.bin` (firmware) and `www.bin` (web
+UI). After changing `BOARD`, run `./docker/idf.sh fullclean` and
+`set-target` again.
 
-
-#### 1. First build the docker container
+### Flashing a build
 
 ```bash
-cd docker
-./build_docker.sh
+./docker/idf.sh -p /dev/ttyACM0 flash monitor
 ```
 
-#### 2. How to use it
+This writes the bootloader, partition table, firmware and web UI; the settings
+on the device are kept.
 
-There are several scripts in the `docker` directory but what is most flexible is to just start the container as bash via
+To flash a build together with a configuration, generate the settings
+partition from `config.cvs` and merge everything into one image (in the
+container shell):
 
 ```bash
 ./docker/idf-shell.sh
+# inside the container:
+nvs_partition_gen.py generate config.cvs config.bin 0x6000
+./merge_bin.sh -c nerdos-factory.bin
+esptool.py --chip esp32s3 -p /dev/ttyACM0 -b 460800 write_flash \
+    --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 nerdos-factory.bin
+exit
 ```
 
-You will get a new terminal that provides tools like:
-- `idf.py`
-- `bitaxetool`
-- `esptool.py`
-- `nvs_partition_gen.py`
+`./merge_bin.sh nerdos-factory.bin` (without `-c`) builds a factory image
+without settings, `-u` one with only the firmware, web UI and OTA data.
 
-The current repository will be mounted to `/home/builder/project`.
-
-The default `builder` user has `uid:gid = 1000:1000` (like the main user on *buntu/Mint)
-
-#### 3. Compiling & Flashing using the shell
-
-#### 3.1. Just flashing with dockered `bitaxetool` with factory binary
-
-(no `idf-shell.sh` version)
+### Tests and checks of the Rust code
 
 ```bash
-./docker/bitaxetool.sh --config config.cvs --firmware esp-miner-factory-NERDQAXEPLUS-v1.0.10.bin -p /dev/ttyACM0
+docker run --rm -v "$PWD":/home/builder/project \
+    -w /home/builder/project/components/rust_core \
+    shufps/esp-idf-builder-rs:5.3.6 \
+    bash -c 'cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace --release'
 ```
 
-##### 3.2. Compiling & Flashing using BitAxe tool
+The host tests include differential tests against the former C/C++
+implementations. Details on the Rust component, its layout and the ESP-IDF
+bindings are in [components/rust_core/README.md](components/rust_core/README.md).
 
-(inside of `idf-shell.sh`)
+### Diagnostic builds with core dumps
 
-```bash
-# start idf-shell
-./docker/idf-shell.sh
-
-# set board
-export BOARD="NERDQAXEPLUS2"
-
-# set target and build the binaries
-idf.py set-target esp32s3
-idf.py build
-
-# merge all partitions including config into a single binary
-./merge_bin.sh nerdqaxe+.bin
-
-bitaxetool --config config.cvs --firmware esp-miner-factory-nerdqaxe+.bin  -p /dev/ttyACM0
-```
-
-#### 3.3. All manual steps for building and flashing
-
-(inside of `idf-shell.sh`)
-
-```bash
-# start idf-shell
-./docker/idf-shell.sh
-
-# set board
-export BOARD="NERDQAXEPLUS2"
-
-# set target and build the binaries
-idf.py set-target esp32s3
-
-# optional if you want to change the sdkconfig
-idf.py menuconfig
-
-# build the binaries
-idf.py build
-
-# creat config.bin nvm partition from config.cvs
-nvs_partition_gen.py generate config.cvs config.bin 12288
-
-# merge all partitions including config into a single binary
-./merge_bin_with_config.sh nerdqaxe+.bin
-
-# flash using esptool
-esptool.py --chip esp32s3 -p /dev/ttyACM0 -b 460800 \
-  --before=default_reset --after=hard_reset write_flash \
-  --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 nerdqaxe+.bin
-```
-
-
-When done just `exit` the shell.
-
-### Persistent panic core dumps
-
-Panic core dumps are an **opt-in diagnostic feature and are disabled in normal builds**. The raw dump can contain WiFi/pool credentials and other task RAM, and its HTTP download endpoint would expose that on the LAN, so it is only compiled in when explicitly requested. The single switch is `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH`: `sdkconfig.coredump` enables it, and the firmware compiles the download endpoint in exactly when it is set.
-
-In CI, tick the **`enable_coredump`** checkbox when dispatching the build workflow. If the tag belongs to a **pre-release**, the diagnostic build is published like any other pre-release (GitHub release and webflasher) and additionally attaches the matching `esp-miner-<board>.elf`. If the tag belongs to a stable release, the workflow fails, so a stable release never ships the download endpoint. Without a release, the build is only uploaded as workflow artifacts with a `-coredump` suffix (ELF included). For a local diagnostic build, layer the opt-in config on top of the defaults (`set-target` regenerates `sdkconfig`):
+Panic core dumps are an opt-in diagnostic feature, disabled in normal builds:
+a dump can contain WiFi and pool credentials and other task RAM, and its
+download endpoint would expose that on the LAN. `sdkconfig.coredump` enables
+`CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH`, and the firmware compiles the download
+endpoint in exactly when it is set.
 
 ```bash
 export SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.coredump"
-idf.py set-target esp32s3
-idf.py build
+./docker/idf.sh set-target esp32s3
+./docker/idf.sh build
 ```
 
-Run `unset SDKCONFIG_DEFAULTS` and `idf.py set-target esp32s3` again to return to a normal build.
+`unset SDKCONFIG_DEFAULTS` and `set-target` again return to a normal build.
+In CI, the **`enable_coredump`** option of the build workflow does the same; it
+is only allowed for pre-releases, which then also carry the matching
+`esp-miner-<board>.elf`.
 
-When enabled, firmware panic core dumps are stored in the existing 64K `coredump` flash partition. The dump uses ESP-IDF's ELF format and includes task registers and stacks, but not a full DRAM/heap capture. Keep the ELF from the exact firmware build that produced the dump.
-
-On coredump-enabled builds the System status page shows a download button (hidden otherwise, driven by the `coreDumpDownload` capability from `/api/v2/identify`) for the last valid dump without erasing it. The download is deliberately user-initiated and uses the normal OTP/session protection when OTP is enabled. The filename includes the board, firmware version, and the crashing application's ELF SHA-256 from the dump itself to identify the matching build, even if firmware has since been updated. Decode the downloaded raw file with the exact matching board ELF:
+The dump goes to the 64K `coredump` partition (ESP-IDF ELF format: task
+registers and stacks). On such builds the **System** page offers the last dump
+for download (with OTP protection if enabled); the file name contains board,
+version and the ELF SHA-256 of the crashed build. Decode it with the ELF of
+exactly that build (in `./docker/idf-shell.sh`):
 
 ```bash
-esp-coredump --chip esp32s3 info_corefile --core coredump_<board>_<version>_<elf-sha256>_<timestamp>.bin --core-format raw esp-miner-<board>.elf
+esp-coredump --chip esp32s3 info_corefile --core-format raw \
+    --core coredump_<board>_<version>_<elf-sha256>_<timestamp>.bin esp-miner-<board>.elf
 ```
 
-From the matching local build directory, ESP-IDF can retrieve and decode the dump directly:
+Or read it from a connected device: `./docker/idf.sh -p /dev/ttyACM0 coredump-info`
+(from the matching build directory). Only share dumps with people you trust.
 
-```bash
-idf.py -p <PORT> coredump-info
-```
+## Repository layout
 
-To retain the raw partition before decoding it with a downloaded release ELF:
+| Path | Content |
+| --- | --- |
+| `components/rust_core/` | the Rust firmware core ([README](components/rust_core/README.md)) |
+| `main/` | entry glue, display (LVGL), board facade, web UI (`main/http_server/axe-os/`) |
+| `docs/API.md` | REST API |
+| `docker/` | build image and helper scripts |
+| `monitoring/` | InfluxDB + Grafana setup |
+| `config.cvs.example` | settings template for factory images |
 
-```bash
-parttool.py --port <PORT> read_partition --partition-name coredump --output coredump.bin
-esp-coredump --chip esp32s3 info_corefile --core coredump.bin --core-format raw esp-miner-<board>.elf
-```
-
-Use a development device to validate the path. There is no production crash endpoint. For a temporary local test, add `ESP_ERROR_CHECK(ESP_FAIL);` in `app_main()` after normal startup tasks have been created, save that build's ELF, build and flash it, then remove the line. A successful decode identifies the crashed task, program counter, and backtrace.
-
-Five task snapshots is the intended conservative limit for this partition. The ESP-IDF 5.3 revision currently used by CI defines this setting but does not enforce it in the core-dump writer, so a dump taken with many heavily used task stacks can still exceed 64K. Full-load validation is required when the toolchain changes.
-
-Core dumps can contain credentials and other sensitive values present in task RAM. They are not uploaded automatically; do not casually share or attach a raw dump without reviewing how it will be handled.
-
-
-### Without Docker
-
-Install bitaxetool from pip. pip is included with Python 3.4 but if you need to install it check <https://pip.pypa.io/en/stable/installation/>
-
-```
-pip install --upgrade bitaxetool
-```
-
-## Grafana Monitoring
+## Grafana monitoring
 
 <img src="https://github.com/user-attachments/assets/3c485428-5e48-4761-9717-bd88579a747d" width="600px">
 
-The NerdQaxe+ firmware supports Influx and the repository provides an installation with Grafana dashboard that can be started with a few bash commands: https://github.com/shufps/nerd-os-rs/tree/main/monitoring
+The firmware can send its statistics to InfluxDB. [monitoring/](monitoring/)
+contains a Docker Compose setup with InfluxDB and a Grafana dashboard.
 
+## Credits
 
+- Bitaxe / [ESP-Miner](https://github.com/skot/ESP-Miner) developers at OSMU: @skot, @ben, @jhonny
+- NerdAxe developer @BitMaker
+- [Bitaxe web flasher](https://github.com/bitaxeorg/bitaxe-web-flasher) by [WantClue](https://github.com/WantClue), on which the NerdQAxe web flasher is based
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE).
