@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, EMPTY } from 'rxjs';
-import { map, switchMap, expand, scan, takeWhile, last } from 'rxjs/operators';
+import { Observable, EMPTY, of } from 'rxjs';
+import { map, switchMap, expand, scan, takeWhile, last, catchError } from 'rxjs/operators';
 
 interface GithubAsset {
   id: number;
@@ -107,9 +107,10 @@ export class GithubUpdateService {
    * gefunden wurden oder keine Releases mehr da sind.
    */
   public getReleases(includePrereleases = false): Observable<GithubRelease[]> {
+    // 404 while the repository has only pre-releases: then nothing is "latest"
     const latest$ = this.httpClient.get<GithubRelease>(
       `${this.baseReleasesUrl}/latest`
-    );
+    ).pipe(catchError(() => of(null)));
 
     const selected$ = this.loadReleasesOfType(includePrereleases, 10, 10, 50);
 
@@ -120,7 +121,7 @@ export class GithubUpdateService {
             const list = releases.map(r => ({
               ...r,
               body: r.body || '',
-              isLatest: !includePrereleases && r.id === latest.id
+              isLatest: !includePrereleases && !!latest && r.id === latest.id
             }));
             // GitHub lists releases by creation date, so e.g. an LTS release made after
             // the latest one would come first. "latest" always goes on top (it is also

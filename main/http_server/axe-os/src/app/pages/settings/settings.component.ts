@@ -120,7 +120,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
             (list ?? []).filter(r =>
               r.assets?.some(a => a.name === this.buildFactoryNameFor(r))
             )
-          )
+          ),
+          // e.g. GitHub's rate limit: an empty list, toggling still works
+          catchError(() => of([] as GithubRelease[]))
         )
       ),
       tap(list => {
