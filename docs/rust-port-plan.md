@@ -142,8 +142,8 @@ built on it, and ChaCha20-Poly1305 is the RustCrypto crate. The step cost
 ## Process
 
 - One branch and one PR per step. The PR description records what was
-  replaced, how it was verified, the change in firmware size, any new C
-  findings and what is left open.
+  replaced, how it was verified, the change in firmware size and what is
+  left open.
 - Merge requirements: host tests green, clippy and rustfmt clean, and the
   firmware builds in `docker/`. A hardware test is noted in the PR. Until
   it is done, the PR says "hardware test pending".
