@@ -42,8 +42,9 @@ what a test would need. When an entry has been tested, delete it.
   is the same, line for line, as before. Not run on hardware:
   - NerdQAxe+ and NerdOCTAXE+: control pins on GPIOs, chip temperatures
     from the ASICs every 15 s.
-  - NerdQAxe++ including the rev7 TPS546 detection, NerdEKO and
-    NerdHAXE-γ.
+  - NerdQAxe++: runs v2.0.0-alpha.1 (flashed with the web flasher); the
+    rev7 TPS546 detection is not covered.
+  - NerdEKO and NerdHAXE-γ.
   - NerdQX: TMP451 mux on GPIO2/3; without the mux the limits drop to
     1150 mV / 495 MHz.
   - NerdOCTAXE-γ: VR detection on GPIO3, two TMP451 muxes.
@@ -125,6 +126,7 @@ Still to test:
 
 The web UI's updater lists the releases of `shufps/nerd-os-rs`, and the factory update only accepts URLs under that repository's release downloads (`http_ota.rs`, host-tested); the CI uploads to `webflasher-rs/` in the R2 bucket. Switching between the Rust and the C firmware is meant to go through the web flasher only.
 
-Still to test (needs a first release of the Rust repository):
-- the updater listing the `-rs` releases and the factory update from one of them;
-- the CI upload into `webflasher-rs/`.
+Tested with the first release (v2.0.0-alpha.1): the CI upload into `webflasher-rs/`, and the web flasher installing it on a NerdQAxe++ and the Q1373.
+
+Still to test:
+- the updater listing the releases and the factory update from one of them.
