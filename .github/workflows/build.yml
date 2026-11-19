@@ -171,7 +171,7 @@ jobs:
         # Run the Docker container to build the project
         docker run --rm --user root -e BOARD=${{ matrix.board }} -e SDKCONFIG_DEFAULTS="$IDF_SDKCONFIG_DEFAULTS" -v $PWD:/home/builder/project \
         shufps/esp-idf-builder-rs:5.3.6 bash -c \
-        'idf.py build && apt-get update && apt-get install -y openssl && python tools/test_ca_bundle.py --build-dir build'
+        'idf.py build && python tools/test_ca_bundle.py --build-dir build'
 
     - name: Verify core dump configuration
       run: |
