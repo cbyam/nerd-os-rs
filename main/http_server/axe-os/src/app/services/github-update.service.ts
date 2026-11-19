@@ -64,11 +64,10 @@ export class GithubUpdateService {
     maxPages = 10,
     perPage = 50
   ): Observable<GithubRelease[]> {
-    const isStable = (r: GithubRelease) =>
-      !r.prerelease && !r.tag_name.includes('-rc');
-
     const isPre = (r: GithubRelease) =>
-      r.prerelease || r.tag_name.includes('-rc');
+      r.prerelease || this.isPrereleaseTag(r.tag_name);
+
+    const isStable = (r: GithubRelease) => !isPre(r);
 
     const matchesType = includePrereleases ? isPre : isStable;
 
@@ -137,26 +136,55 @@ export class GithubUpdateService {
     );
   }
 
+  /** A tag with a pre-release suffix, e.g. `v2.0.0-alpha.1` or `v2.0.0-rc.2`. */
+  public isPrereleaseTag(tag: string): boolean {
+    return tag.replace(/^v/, '').includes('-');
+  }
+
   /**
-   * Compare two semantic versions
+   * Compare two versions like semantic versioning: `MAJOR.MINOR.PATCH`, then
+   * a version with a pre-release suffix (`-alpha.1`, `-rc.2`) is older than
+   * the same version without one; suffixes compare part by part (numbers
+   * numerically, words alphabetically, fewer parts first).
    * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
    */
   public compareVersions(v1: string, v2: string): number {
-    // Remove 'v' prefix if present
-    const cleanV1 = v1.replace(/^v/, '');
-    const cleanV2 = v2.replace(/^v/, '');
+    const parse = (v: string) => {
+      const clean = v.replace(/^v/, '');
+      const dash = clean.indexOf('-');
+      const core = dash < 0 ? clean : clean.slice(0, dash);
+      const pre = dash < 0 ? [] : clean.slice(dash + 1).split('.');
+      return { core: core.split('.').map(p => parseInt(p) || 0), pre };
+    };
+    const a = parse(v1);
+    const b = parse(v2);
 
-    const parts1 = cleanV1.split('.').map(p => parseInt(p) || 0);
-    const parts2 = cleanV2.split('.').map(p => parseInt(p) || 0);
-
-    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-      const p1 = parts1[i] || 0;
-      const p2 = parts2[i] || 0;
-
-      if (p1 > p2) return 1;
-      if (p1 < p2) return -1;
+    for (let i = 0; i < Math.max(a.core.length, b.core.length); i++) {
+      const p1 = a.core[i] || 0;
+      const p2 = b.core[i] || 0;
+      if (p1 !== p2) return p1 > p2 ? 1 : -1;
     }
 
+    // same core: a release is newer than its pre-releases
+    if (!a.pre.length || !b.pre.length) {
+      return a.pre.length === b.pre.length ? 0 : (a.pre.length ? -1 : 1);
+    }
+    for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
+      const p1 = a.pre[i];
+      const p2 = b.pre[i];
+      if (p1 === undefined) return -1;
+      if (p2 === undefined) return 1;
+      const n1 = /^\d+$/.test(p1);
+      const n2 = /^\d+$/.test(p2);
+      if (n1 && n2) {
+        const d = parseInt(p1) - parseInt(p2);
+        if (d !== 0) return d > 0 ? 1 : -1;
+      } else if (n1 !== n2) {
+        return n1 ? -1 : 1;
+      } else if (p1 !== p2) {
+        return p1 > p2 ? 1 : -1;
+      }
+    }
     return 0;
   }
 
