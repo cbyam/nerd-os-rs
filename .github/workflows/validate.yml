@@ -1,14 +1,10 @@
 name: Validate ESP32 Firmware on PR
 
-# Manual for now: the Actions minutes of this private repo are used up.
-# Before a merge, the same checks run locally in the CI image:
-#   docker run --rm --user root -e CARGO_TARGET_DIR=/tmp/target -v $PWD:/home/builder/project \
-#     -w /home/builder/project/components/rust_core shufps/esp-idf-builder-rs:5.3.6 bash -c \
-#     'cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace --release'
-# To run on pull requests again:
-#   pull_request:
-#     types: [opened, synchronize, reopened]
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
