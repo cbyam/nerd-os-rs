@@ -1,0 +1,17 @@
+/* Compiles the rust_core headers on the host, so their layout assertions
+ * are checked for 64-bit too (the firmware build checks 32-bit). */
+#include "coinbase_decoder.h"
+#include "mining_rs.h"
+#include "stratum_v1.h"
+#include "sv2_protocol.h"
+#include "sv2_session.h"
+#include "pool_policy.h"
+#include "stratum_task_loop.h"
+#include "asic_driver.h"
+#include "http_auth.h"
+#include "http_settings.h"
+#include "http_query.h"
+#include "http_ota.h"
+#include "apis.h"
+#include "pool_stats.h"
+#include "pool_coinbase.h"

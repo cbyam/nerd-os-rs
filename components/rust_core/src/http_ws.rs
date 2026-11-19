@@ -1,0 +1,191 @@
+//! The log over the web socket (port of `main/http_server/http_websocket.cpp`):
+//! after the handshake on `/api/ws` every log line also goes to that socket
+//! (one client at a time, the newest), sent by a task from a queue of 128
+//! lines (full: dropped). The `vprintf` hook that formats the lines is C
+//! (`ws_log.c`: Rust cannot take a `va_list`).
+
+use crate::idf::idf_const;
+use core::ffi::{c_char, c_int, c_void, CStr};
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::{Mutex, OnceLock};
+
+use crate::idf::httpd::{self, Req};
+use crate::idf::{EspErr, ESP_OK};
+use crate::log::log;
+
+const TAG: &CStr = c"http_websocket";
+/// `MESSAGE_QUEUE_SIZE`
+const QUEUE_SIZE: usize = 128;
+idf_const!(WS_TEXT: u32 = httpd_ws_type_t_HTTPD_WS_TYPE_TEXT, 1);
+idf_const!(WS_CLOSE: u32 = httpd_ws_type_t_HTTPD_WS_TYPE_CLOSE, 8);
+idf_const!(WS_CLIENT_WEBSOCKET: u32 = httpd_ws_client_info_t_HTTPD_WS_CLIENT_WEBSOCKET, 2);
+
+#[cfg(target_os = "espidf")]
+pub use crate::idf::raw::httpd_ws_frame_t as WsFrame;
+#[cfg(not(target_os = "espidf"))]
+/// `httpd_ws_frame_t` (host model)
+#[repr(C)]
+pub struct WsFrame {
+    pub final_: bool,
+    pub fragmented: bool,
+    pub type_: u32,
+    pub payload: *mut u8,
+    pub len: usize,
+}
+
+#[cfg(target_os = "espidf")]
+mod sys {
+    pub use crate::idf::raw::{
+        httpd_ws_get_fd_info, httpd_ws_recv_frame, httpd_ws_send_frame_async,
+    };
+    extern "C" {
+        pub fn ws_log_install();
+        pub fn ws_log_uninstall();
+    }
+}
+
+#[cfg(not(target_os = "espidf"))]
+mod sys {
+    use super::*;
+    pub unsafe fn httpd_ws_recv_frame(_: *mut Req, _: *mut WsFrame, _: usize) -> EspErr {
+        crate::idf::ESP_FAIL
+    }
+    pub unsafe fn httpd_ws_send_frame_async(_: httpd::Handle, _: c_int, _: *mut WsFrame) -> EspErr {
+        crate::idf::ESP_FAIL
+    }
+    pub unsafe fn httpd_ws_get_fd_info(_: httpd::Handle, _: c_int) -> u32 {
+        0
+    }
+    pub unsafe fn ws_log_install() {}
+    pub unsafe fn ws_log_uninstall() {}
+}
+
+/// The log socket, -1: none (written by the httpd task, read by the log
+/// task).
+static FD: AtomicI32 = AtomicI32::new(-1);
+
+/// A `malloc()`ed log line.
+struct Line(*mut c_char);
+unsafe impl Send for Line {}
+
+static TX: OnceLock<SyncSender<Line>> = OnceLock::new();
+
+/// Stops the forwarding if `fd` is (still) the log socket: a stale reset
+/// must not stop the forwarding to a newer one.
+fn reset_fd(fd: c_int) {
+    if fd >= 0
+        && FD
+            .compare_exchange(fd, -1, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    {
+        // the normal log output again
+        unsafe { sys::ws_log_uninstall() };
+    }
+}
+
+/// The httpd close callback.
+pub fn on_close(fd: c_int) {
+    if fd == FD.load(Ordering::Acquire) {
+        log!(Info, TAG, "resetting websocket {fd}");
+    }
+    reset_fd(fd);
+}
+
+/// The `/api/ws` handler: the handshake starts the forwarding, a CLOSE
+/// frame stops it.
+///
+/// # Safety
+/// `req` valid.
+pub unsafe extern "C" fn handler(req: *mut Req) -> EspErr {
+    if (*req).method as httpd::Method == httpd::method::GET {
+        log!(Info, TAG, "Handshake done, the new connection was opened");
+        sys::ws_log_install();
+        FD.store(httpd::httpd_req_to_sockfd(req), Ordering::Release);
+        return ESP_OK;
+    }
+    // the header only (opcode, length)
+    let mut pkt: WsFrame = core::mem::zeroed();
+    let ret = sys::httpd_ws_recv_frame(req, &mut pkt, 0);
+    if ret != ESP_OK {
+        return ret;
+    }
+    if pkt.type_ == WS_CLOSE {
+        log!(Info, TAG, "WebSocket closed, disabling log forwarding");
+        reset_fd(httpd::httpd_req_to_sockfd(req));
+    }
+    ESP_OK
+}
+
+unsafe fn send(line: *mut c_char) {
+    let mut pkt: WsFrame = core::mem::zeroed();
+    pkt.payload = line as *mut u8;
+    pkt.len = CStr::from_ptr(line).to_bytes().len();
+    pkt.type_ = WS_TEXT;
+    // the socket number is reused after a close: send only while it is a
+    // web socket (the close callback resets FD before)
+    let fd = FD.load(Ordering::Acquire);
+    let server = crate::http_server::http_server.load(Ordering::Acquire);
+    if !server.is_null()
+        && fd >= 0
+        && (sys::httpd_ws_get_fd_info(server, fd) != WS_CLIENT_WEBSOCKET
+            || sys::httpd_ws_send_frame_async(server, fd, &mut pkt) != ESP_OK)
+    {
+        // dead, or the socket was reused
+        reset_fd(fd);
+    }
+}
+
+unsafe extern "C" fn task(_: *mut c_void) {
+    let Some(rx) = task_rx().lock().unwrap_or_else(|e| e.into_inner()).take() else {
+        return;
+    };
+    for Line(line) in rx.iter() {
+        if FD.load(Ordering::Acquire) < 0 {
+            // no socket: dropped
+            crate::cutil::c_free(line as *mut c_void);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            continue;
+        }
+        send(line);
+        crate::cutil::c_free(line as *mut c_void);
+    }
+}
+
+/// The queue and the sending task.
+pub fn start() {
+    let (tx, rx) = sync_channel(QUEUE_SIZE);
+    let _ = TX.set(tx);
+    // the task takes the receiver
+    *task_rx().lock().unwrap_or_else(|e| e.into_inner()) = Some(rx);
+    unsafe {
+        crate::idf::task::create_psram(
+            task,
+            c"websocket_log_handler".as_ptr(),
+            4096,
+            core::ptr::null_mut(),
+            2,
+            core::ptr::null_mut(),
+        )
+    };
+}
+
+/// The receiver until the task takes it.
+fn task_rx() -> &'static Mutex<Option<Receiver<Line>>> {
+    static RX: Mutex<Option<Receiver<Line>>> = Mutex::new(None);
+    &RX
+}
+
+pub(crate) mod ffi {
+    use super::*;
+
+    /// A formatted log line (`malloc()`ed) for the socket; false if the
+    /// queue is full or not there (the caller frees it then). Must not log.
+    #[no_mangle]
+    pub extern "C" fn ws_log_enqueue(line: *mut c_char) -> bool {
+        match TX.get() {
+            Some(tx) => tx.try_send(Line(line)).is_ok(),
+            None => false,
+        }
+    }
+}

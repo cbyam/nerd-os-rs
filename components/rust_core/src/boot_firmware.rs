@@ -1,0 +1,519 @@
+//! The boot steps of the firmware (port of the hooks of `main/main.cpp`):
+//! the IDF setup, the board, the tasks, the network setup, all reached
+//! directly. Only what needs the C++ objects of the display stays in C++
+//! (`boot_cpp_hooks()`, main.cpp): the `Board` with its theme and self
+//! test, the `System` module with the display, and the `StratumManager`
+//! the display reads.
+
+use crate::idf::idf_const;
+use core::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::CString;
+use std::time::Duration;
+
+use crate::boot::{Hooks, PoolMode};
+use crate::idf::nvs::err_name;
+use crate::idf::task::{create_internal, create_psram, TaskFn};
+use crate::idf::{EspErr, ESP_OK};
+use crate::log::log;
+
+const TAG: &CStr = c"nerd*axe";
+
+/// the task watchdog: an hour (the stratum task feeds it)
+const WATCHDOG_TIMEOUT_MS: u32 = 3600 * 1000;
+idf_const!(RST_TASK_WDT: c_int = esp_reset_reason_t_ESP_RST_TASK_WDT, 6);
+idf_const!(ESP_ERR_INVALID_STATE: EspErr = ESP_ERR_INVALID_STATE, 0x103);
+idf_const!(CAP_PSRAM: u32 = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, (1 << 10) | (1 << 2));
+idf_const!(CAP_DEFAULT: u32 = MALLOC_CAP_DEFAULT, 1 << 12);
+idf_const!(CAP_INTERNAL: u32 = MALLOC_CAP_INTERNAL, 1 << 11);
+
+#[cfg(target_os = "espidf")]
+pub use crate::idf::raw::boot_cpp_hooks_t as CppHooks;
+#[cfg(not(target_os = "espidf"))]
+/// `boot_cpp_hooks_t` (boot.h): the steps on the C++ objects.
+pub struct CppHooks {
+    pub board_create: Option<unsafe extern "C" fn()>,
+    pub system_set_board: Option<unsafe extern "C" fn()>,
+    pub self_test: Option<unsafe extern "C" fn()>,
+    pub system_init: Option<unsafe extern "C" fn()>,
+    pub create_stratum_manager: Option<unsafe extern "C" fn(dual: bool)>,
+}
+
+#[cfg(target_os = "espidf")]
+pub use crate::idf::raw::esp_task_wdt_config_t as WdtConfig;
+#[cfg(not(target_os = "espidf"))]
+/// `esp_task_wdt_config_t`
+pub struct WdtConfig {
+    pub timeout_ms: u32,
+    pub idle_core_mask: u32,
+    pub trigger_panic: bool,
+}
+
+#[cfg(target_os = "espidf")]
+mod sys {
+    pub use crate::idf::raw::{
+        boot_cpp_hooks, esp_event_loop_create_default, esp_netif_init, esp_task_wdt_init,
+        gpio_install_isr_service, heap_caps_calloc, heap_caps_free, heap_caps_get_free_size,
+        mbedtls_platform_set_calloc_free, nvs_flash_init, vTaskSuspend,
+    };
+}
+
+#[cfg(not(target_os = "espidf"))]
+#[allow(non_snake_case)]
+mod sys {
+    use super::*;
+    pub unsafe fn esp_task_wdt_init(_: *const WdtConfig) -> EspErr {
+        ESP_OK
+    }
+    pub unsafe fn mbedtls_platform_set_calloc_free(
+        _: Option<unsafe extern "C" fn(usize, usize) -> *mut c_void>,
+        _: Option<unsafe extern "C" fn(*mut c_void)>,
+    ) -> c_int {
+        0
+    }
+    pub unsafe fn heap_caps_calloc(_: usize, _: usize, _: u32) -> *mut c_void {
+        core::ptr::null_mut()
+    }
+    pub unsafe fn heap_caps_free(_: *mut c_void) {}
+    pub unsafe fn heap_caps_get_free_size(_: u32) -> usize {
+        0
+    }
+    pub unsafe fn nvs_flash_init() -> EspErr {
+        ESP_OK
+    }
+    pub unsafe fn gpio_install_isr_service(_: c_int) -> EspErr {
+        ESP_OK
+    }
+    pub unsafe fn esp_netif_init() -> EspErr {
+        ESP_OK
+    }
+    pub unsafe fn esp_event_loop_create_default() -> EspErr {
+        ESP_OK
+    }
+    pub unsafe fn vTaskSuspend(_: *mut c_void) {}
+}
+
+/// `ESP_ERROR_CHECK()`
+fn check(e: EspErr, what: &str) {
+    if e != ESP_OK {
+        panic!("ESP_ERROR_CHECK failed: {what}: {}", err_name(e));
+    }
+}
+
+/// mbedTLS allocations in PSRAM (TLS costs a lot of internal RAM), internal
+/// RAM as the fallback.
+unsafe extern "C" fn psram_calloc(n: usize, size: usize) -> *mut c_void {
+    let p = if n == 0 || size == 0 {
+        core::ptr::null_mut()
+    } else {
+        sys::heap_caps_calloc(n, size, CAP_PSRAM)
+    };
+    if !p.is_null() {
+        return p;
+    }
+    log!(
+        Error,
+        TAG,
+        "PSRAM allocation failed! Falling back to internal RAM."
+    );
+    sys::heap_caps_calloc(n, size, CAP_DEFAULT)
+}
+
+unsafe extern "C" fn psram_free(p: *mut c_void) {
+    sys::heap_caps_free(p)
+}
+
+/// A step of the C++ side (all are set by main.cpp).
+fn call(hook: Option<unsafe extern "C" fn()>) {
+    if let Some(f) = hook {
+        unsafe { f() }
+    }
+}
+
+fn board_info() -> crate::board::ffi::Info {
+    let mut i = core::mem::MaybeUninit::uninit();
+    unsafe {
+        crate::board::ffi::board_info(i.as_mut_ptr());
+        i.assume_init()
+    }
+}
+
+unsafe fn task(code: TaskFn, name: &'static CStr, stack: u32, prio: u32) {
+    create_psram(
+        code,
+        name.as_ptr(),
+        stack,
+        core::ptr::null_mut(),
+        prio,
+        core::ptr::null_mut(),
+    );
+}
+
+/// Network preferred route changed (ETH <-> WiFi): the pools reconnect.
+unsafe extern "C" fn on_preferred_changed() {
+    log!(
+        Warn,
+        TAG,
+        "Network preferred route changed -> request stratum reconnect"
+    );
+    crate::pool_manager::ffi::pool_mgr_reconnect_all();
+}
+
+/// The firmware's boot steps.
+pub struct Firmware {
+    cpp: &'static CppHooks,
+    eth_started: bool,
+}
+
+impl Firmware {
+    /// # Safety
+    /// `cpp` valid for the program's lifetime.
+    pub unsafe fn new(cpp: *const CppHooks) -> Self {
+        Firmware {
+            cpp: &*cpp,
+            eth_started: false,
+        }
+    }
+}
+
+fn cfg_str(key: &[u8], def: &str) -> Vec<u8> {
+    crate::config::get_str(key)
+        .map(|v| crate::cutil::until_nul(&v).to_vec())
+        .unwrap_or_else(|| def.as_bytes().to_vec())
+}
+
+impl Hooks for Firmware {
+    fn early_init(&mut self) -> bool {
+        let wdt = WdtConfig {
+            timeout_ms: WATCHDOG_TIMEOUT_MS,
+            idle_core_mask: 0,
+            trigger_panic: true,
+        };
+        let e = unsafe { sys::esp_task_wdt_init(&wdt) };
+        if e != ESP_OK {
+            log!(Error, TAG, "Failed to initialize watchdog: {e}");
+        }
+        unsafe { sys::mbedtls_platform_set_calloc_free(Some(psram_calloc), Some(psram_free)) };
+
+        log!(Info, TAG, "Welcome to the Nerd*Axe - hack the planet!");
+        check(unsafe { sys::nvs_flash_init() }, "nvs_flash_init");
+        // shows and saves the last reset reason
+        let reason = crate::system::read_reset_reason();
+        // loads (or migrates) the config; the NerdAxe and NerdAxe-γ have one fan
+        let single_fan = matches!(crate::sdkconfig::BOARD, "NERDAXE" | "NERDAXEGAMMA");
+        crate::config_nvs::init(single_fan, crate::sdkconfig::OVERHEAT_TEMP as u16);
+
+        let e = unsafe { sys::gpio_install_isr_service(0) };
+        if e != ESP_OK && e != ESP_ERR_INVALID_STATE {
+            log!(
+                Error,
+                TAG,
+                "gpio_install_isr_service failed: {}",
+                err_name(e)
+            );
+        }
+        check(unsafe { sys::esp_netif_init() }, "esp_netif_init");
+        let e = unsafe { sys::esp_event_loop_create_default() };
+        if e != ESP_ERR_INVALID_STATE {
+            check(e, "esp_event_loop_create_default");
+        }
+        reason == RST_TASK_WDT
+    }
+
+    fn board_create(&mut self) {
+        call(self.cpp.board_create)
+    }
+
+    /// The W5500 if the board has Ethernet; before and after the board init,
+    /// set up (or attempted) once.
+    fn eth_init(&mut self) {
+        if self.eth_started || !crate::board::ffi::board_has_ethernet() {
+            return;
+        }
+        self.eth_started = true;
+        // a HAT on the board's pins (no reset line, no interrupt), else the
+        // on-board W5500's defaults
+        if let Some(p) = crate::board::get().and_then(|b| b.eth_pins()) {
+            crate::w5500::set_pins(
+                p.sclk,
+                p.mosi,
+                p.miso,
+                p.cs,
+                crate::w5500::GPIO_NC,
+                crate::w5500::GPIO_NC,
+            );
+        }
+        crate::network::ffi::network_early_eth_init();
+    }
+
+    fn board_load_settings(&mut self) {
+        crate::board::ffi::board_load_settings()
+    }
+
+    fn board_init(&mut self) {
+        crate::board::ffi::board_init();
+    }
+
+    fn board_detect_eth(&mut self) {
+        crate::board::ffi::board_detect_ethernet()
+    }
+
+    fn system_set_board(&mut self) {
+        call(self.cpp.system_set_board)
+    }
+
+    fn self_test_enabled(&mut self) -> bool {
+        crate::config::get_u16(b"selftest", 0) != 0
+    }
+
+    fn best_diff(&mut self) -> u64 {
+        crate::config::get_u64(b"bestdiff", 0)
+    }
+
+    fn self_test(&mut self) {
+        call(self.cpp.self_test)
+    }
+
+    fn delay_ms(&mut self, ms: u32) {
+        std::thread::sleep(Duration::from_millis(ms as u64));
+    }
+
+    fn is_can_slave(&mut self) -> bool {
+        crate::board::ffi::board_is_can_slave()
+    }
+
+    fn log_can_slave(&mut self) {
+        log!(Info, TAG, "CAN Slave mode");
+    }
+
+    fn system_init(&mut self) {
+        call(self.cpp.system_init)
+    }
+
+    fn start_system_tasks(&mut self) {
+        unsafe {
+            task(crate::system::ffi::system_task, c"SYSTEM_task", 4096, 3);
+            task(
+                crate::power_mgmt::ffi::pm_task,
+                c"power mangement",
+                8192,
+                10,
+            );
+        }
+        crate::system::set_startup_done();
+    }
+
+    fn can_init(&mut self) {
+        crate::can::init(
+            crate::board::ffi::board_can_tx_pin(),
+            crate::board::ffi::board_can_rx_pin(),
+        );
+    }
+
+    fn init_asics(&mut self) {
+        crate::power_mgmt::lock();
+        if !crate::board::ffi::board_init_asics() {
+            let model = board_info().device_model;
+            let model = if model.is_null() {
+                "".into()
+            } else {
+                unsafe { CStr::from_ptr(model) }.to_string_lossy()
+            };
+            log!(Error, TAG, "error initializing board {model}");
+        }
+        crate::power_mgmt::unlock();
+    }
+
+    fn start_can_slave_tasks(&mut self) {
+        use crate::can::ffi as can;
+        unsafe {
+            task(can::can_slave_task, c"can slave", 4096, 10);
+            task(can::can_slave_result_task, c"can result", 4096, 10);
+            task(can::can_slave_telemetry_task, c"can telem", 4096, 5);
+        }
+    }
+
+    fn has_hashrate_counter(&mut self) -> bool {
+        board_info().has_hash_counter
+    }
+
+    fn start_hashrate_monitor(&mut self) {
+        crate::tasks::ffi::hashrate_monitor_start();
+    }
+
+    fn pool_mode(&mut self) -> c_int {
+        crate::cfg::pool_mode() as c_int
+    }
+
+    fn log_invalid_pool_mode(&mut self, v: c_int) {
+        log!(Error, TAG, "invalid pool mode {v}, using failover");
+    }
+
+    fn create_stratum_manager(&mut self, mode: PoolMode) {
+        if let Some(f) = self.cpp.create_stratum_manager {
+            unsafe { f(mode == PoolMode::Dual) }
+        }
+    }
+
+    fn stratum_load_settings(&mut self) {
+        crate::pool_manager::ffi::pool_mgr_load_settings();
+    }
+
+    /// WiFi (and Ethernet), the HTTP server, then waiting for an IP;
+    /// mDNS once there is one.
+    fn setup_network(&mut self) {
+        let ssid = cfg_str(b"wifissid", crate::sdkconfig::ESP_WIFI_SSID);
+        let pass = cfg_str(b"wifipass", crate::sdkconfig::ESP_WIFI_PASSWORD);
+        let hostname = crate::cfg::hostname();
+        crate::system::set_ssid(&ssid);
+
+        crate::network::ffi::network_set_hook_preferred_changed(Some(on_preferred_changed));
+        let has_eth = crate::board::ffi::board_has_ethernet();
+        check(
+            crate::network::start(&ssid, &pass, &hostname, has_eth),
+            "network start",
+        );
+
+        // the REST server for the AP fallback / config (also reachable over
+        // LAN and WiFi)
+        crate::http_server::ffi::start_rest_server(core::ptr::null_mut());
+
+        loop {
+            if crate::network::wait_any_ip(Duration::from_secs(30)) != 0 {
+                if crate::netmgr::ffi::netmgr_eth_has_ip() {
+                    log!(Info, TAG, "Network up via ETH (preferred)");
+                    crate::system::set_wifi_status(b"LAN Connected!");
+                } else {
+                    log!(Info, TAG, "Network up via WiFi");
+                    crate::system::set_wifi_status(b"WiFi Connected!");
+                }
+                let b = board_info();
+                let s = |p: *const c_char| {
+                    if p.is_null() {
+                        String::new()
+                    } else {
+                        unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
+                    }
+                };
+                crate::mdns::start(
+                    &hostname.to_string_lossy(),
+                    b.version,
+                    b.asic_count,
+                    &s(b.device_model),
+                    &s(b.asic_model),
+                );
+                return;
+            }
+            log!(
+                Info,
+                TAG,
+                "Waiting for network IP... (AP is available for config)"
+            );
+        }
+    }
+
+    fn has_pool_user(&mut self) -> bool {
+        // without the Kconfig default: no user configured, no mining
+        !cfg_str(b"stratumuser", "").is_empty()
+    }
+
+    fn ap_off_once(&mut self) {
+        crate::network::shutdown_ap_once()
+    }
+
+    fn discord_start(&mut self) {
+        crate::discord::start()
+    }
+
+    fn otp_init(&mut self) {
+        let model = board_info().device_model;
+        let hostname = CString::new(crate::system::hostname().to_bytes()).unwrap_or_default();
+        unsafe {
+            crate::otp_device::ffi::otp_dev_init(
+                hostname.as_ptr(),
+                crate::network::ffi::network_mac_addr(),
+                model,
+            )
+        };
+    }
+
+    fn sntp_start(&mut self) {
+        crate::clock::start()
+    }
+
+    fn discord_watchdog_alert(&mut self) {
+        crate::discord::ffi::discord_send_watchdog();
+    }
+
+    fn start_mining_tasks(&mut self) {
+        use crate::tasks::ffi as t;
+        unsafe {
+            task(t::create_jobs_task, c"stratum miner", 8192, 10);
+            task(t::ASIC_result_task, c"asic result", 8192, 15);
+            task(t::influx_task, c"influx", 8192, 1);
+            task(crate::apis_fetcher::ffi::apis_task, c"apis ticker", 8192, 5);
+            task(
+                crate::wifi_health::ffi::wifi_monitor_task,
+                c"wifi monitor",
+                4096,
+                1,
+            );
+        }
+    }
+
+    fn can_master_wanted(&mut self) -> bool {
+        crate::cfg::can_enabled() && crate::board::ffi::board_has_can_extension()
+    }
+
+    fn start_can_master(&mut self) {
+        self.can_init();
+        // internal RAM, as before (xTaskCreate)
+        create_internal(crate::can::ffi::can_master_task, c"can master", 4096, 5);
+    }
+
+    fn start_ota_task(&mut self) {
+        // writes flash: its task is in internal RAM
+        crate::ota_factory_task::ffi::ota_factory_start();
+    }
+
+    fn start_stratum_task(&mut self) {
+        unsafe {
+            task(
+                crate::pool_manager::ffi::pool_mgr_task,
+                c"stratum manager",
+                8192,
+                5,
+            )
+        };
+    }
+
+    fn is_shutdown(&mut self) -> bool {
+        crate::power_mgmt::is_shutdown()
+    }
+
+    fn suspend(&mut self) {
+        // the stratum task leaves the watchdog on shutdown
+        log!(Warn, TAG, "suspended");
+        unsafe { sys::vTaskSuspend(core::ptr::null_mut()) };
+    }
+
+    fn free_internal_heap(&mut self) -> usize {
+        unsafe { sys::heap_caps_get_free_size(CAP_INTERNAL) }
+    }
+
+    fn log_low_heap(&mut self, bytes: usize) {
+        log!(
+            Warn,
+            TAG,
+            "*** WARNING *** Free internal heap: {bytes} bytes"
+        );
+    }
+}
+
+/// The firmware's entry point (the ESP-IDF main task).
+#[cfg(target_os = "espidf")]
+#[no_mangle]
+pub extern "C" fn app_main() {
+    let mut f = unsafe { Firmware::new(sys::boot_cpp_hooks()) };
+    crate::boot::start(&mut f);
+    while crate::boot::idle(&mut f) {}
+}

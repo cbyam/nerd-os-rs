@@ -1,0 +1,4 @@
+# Xtensa (ESP32-S3) needs Espressif's fork of rustc, installed with `espup`.
+# The same toolchain also builds and runs the host tests.
+[toolchain]
+channel = "esp"

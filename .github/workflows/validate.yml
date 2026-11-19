@@ -1,0 +1,83 @@
+name: Validate ESP32 Firmware on PR
+
+# Manual for now: the Actions minutes of this private repo are used up.
+# Before a merge, the same checks run locally in the CI image:
+#   docker run --rm --user root -e CARGO_TARGET_DIR=/tmp/target -v $PWD:/home/builder/project \
+#     -w /home/builder/project/components/rust_core shufps/esp-idf-builder-rs:5.3.6 bash -c \
+#     'cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace --release'
+# To run on pull requests again:
+#   pull_request:
+#     types: [opened, synchronize, reopened]
+on:
+  workflow_dispatch:
+
+jobs:
+  ca-bundle-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Check pinned CA bundle and compromised certificate chains
+      run: |
+        python3 tools/test_ca_bundle.py
+
+  rust-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - name: rust_core host tests (incl. differential tests against the former C/C++ code)
+      run: |
+        docker run --rm --user root -e CARGO_TARGET_DIR=/tmp/target -v $PWD:/home/builder/project \
+        -w /home/builder/project/components/rust_core shufps/esp-idf-builder-rs:5.3.6 bash -c \
+        'cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace --release'
+
+  build-check:
+    needs: [ca-bundle-test, rust-tests]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - board: NERDQAXEPLUS
+            label: NerdQAxe+
+          - board: NERDOCTAXEPLUS
+            label: NerdOCTAXE+
+          - board: NERDQAXEPLUS2
+            label: NerdQAxe++
+          - board: NERDAXE
+            label: NerdAxe
+          - board: NERDOCTAXEGAMMA
+            label: NerdOCTAXE-Gamma
+          - board: NERDAXEGAMMA
+            label: NerdAxeGamma
+          - board: NERDAXEGAIA
+            label: NerdAxeGaia
+          - board: NERDHAXEGAMMA
+            label: NerdHaxe-Gamma
+          - board: NERDEKO
+            label: NerdEKO
+          - board: NERDQX
+            label: NerdQX
+          - board: Q1370
+            label: Q1370
+          - board: Q1373
+            label: Q1373
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Set Target for ${{ matrix.label }}
+      run: |
+        docker run --rm --user root -e BOARD=${{ matrix.board }} -v $PWD:/home/builder/project \
+        shufps/esp-idf-builder-rs:5.3.6 idf.py set-target esp32s3
+
+    - name: Build firmware for ${{ matrix.label }}
+      run: |
+        docker run --rm --user root -e BOARD=${{ matrix.board }} -v $PWD:/home/builder/project \
+        shufps/esp-idf-builder-rs:5.3.6 bash -c \
+        'idf.py build && apt-get update && apt-get install -y openssl && python tools/test_ca_bundle.py --build-dir build'

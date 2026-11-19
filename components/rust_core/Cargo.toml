@@ -1,0 +1,47 @@
+[package]
+name = "rust_core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+publish = false
+description = "Rust parts of the ESP-Miner firmware, linked into the ESP-IDF build as a static library"
+
+[lib]
+# staticlib: linked into the firmware by CMakeLists.txt
+# rlib:      used by host tests and the c-reference crate
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
+bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
+chacha20poly1305 = { version = "0.10", default-features = false }
+
+# SHA-256 on the host; on the device mbedTLS (hardware accelerated) is used.
+[target.'cfg(not(target_os = "espidf"))'.dependencies]
+sha2 = { version = "0.10", default-features = false }
+sha1 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+# tests compare against standard JSON; the firmware reads JSON with src/ajson.rs
+serde_json = "1"
+
+[build-dependencies]
+# Host builds only: compiles libsecp256k1 and the ESP-IDF stand-ins (build.rs).
+cc = "1.1"
+# Firmware builds only: the ESP-IDF bindings (build.rs, src/idf/raw.rs).
+bindgen = { version = "0.70", default-features = false, features = ["runtime"] }
+
+[workspace]
+members = ["c-reference"]
+default-members = ["."]
+
+[profile.release]
+opt-level = "s"
+codegen-units = 1
+lto = true
+panic = "abort"
+# Debug info is not flashed, but keeps addr2line/core dumps usable.
+debug = "line-tables-only"
+
+[profile.dev]
+panic = "abort"

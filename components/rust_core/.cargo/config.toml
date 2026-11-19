@@ -1,0 +1,3 @@
+[target.xtensa-esp32s3-espidf]
+# ESP-IDF >= 5.0 uses a 64-bit time_t; the libc crate must match.
+rustflags = ["--cfg", "espidf_time64"]
