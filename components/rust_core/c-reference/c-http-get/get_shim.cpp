@@ -282,6 +282,7 @@ void shim_set_dash(const dashboard_t *d)
         s.fans[ch].speed_perc = d->fan_speed[ch];
         s.fans[ch].rpm = d->fan_rpm[ch];
     }
+    s.fans[1].overheat_temp = d->vr_overheat_temp;
     s.manager = d->manager;
     s.stratum_url = d->pool_host[0];
     s.fallback_stratum_url = d->pool_host[1];

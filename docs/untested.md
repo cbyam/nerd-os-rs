@@ -136,3 +136,9 @@ Still to test:
 On the first access to the profiles of a device that never had profiles (no `profiles` blob in NVS: a new device or one updated from v2.0.0-alpha.1 or the C firmware), the profile "default" is created from the current settings and marked active.
 
 Tested on hardware: a NerdQAxe++ updated over OTA from v2.0.0-alpha.1 got "default" (its 600 MHz / 1150 mV, failover without a balance, both fans) marked active; a Q1373 whose list exists kept it unchanged.
+
+## From upstream v1.1.3-alpha.1 (Gaia)
+
+Ported from the C firmware: the Gaia-Dark Nebular theme (#765) and the VR temperature gauge of the Gaia home page scaled to the VR shutdown temperature (#766, `vrOverheatTemp` in `GET /api/v2/dashboard`). The new dashboard field is checked by the differential test and on a Q1373 (two fan channels: `vrOverheatTemp` = fan channel 1's shutdown temperature).
+
+Still to test on a NerdAxe Gaia: the Gaia-Dark theme and the VR gauge on the home page.

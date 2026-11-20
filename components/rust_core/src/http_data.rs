@@ -433,6 +433,7 @@ unsafe extern "C" fn dashboard(req: *mut Req) -> EspErr {
     d.shutdown = power_mgmt::is_shutdown();
     d.board_error = crate::system::error().0;
     d.overheat_temp = cfg::overheat_temp();
+    d.vr_overheat_temp = cfg::fan_overheat_temp(1);
 
     d.hashrate_timestamp = history_current_timestamp();
     d.hashrate = crate::system::current_hashrate();
