@@ -381,3 +381,19 @@
 .wifi-scan-entry__rssi--fair      { color: #ffc107; }
 .wifi-scan-entry__rssi--weak      { color: #f44336; }
 
+
+.profile-box {
+  .profile-header {
+    gap: 0.5rem;
+  }
+
+  .profile-divider {
+    border-color: var(--card-divider-color);
+    margin: 1.5rem 0 1rem;
+    opacity: 1;
+  }
+
+  .profile-section {
+    margin-bottom: 1rem;
+  }
+}
