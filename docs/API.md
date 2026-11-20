@@ -372,7 +372,9 @@ Send a test message to the configured webhook. Requires OTP.
 
 ### Profiles
 
-Up to 5 named sets of settings to switch between, e.g. from a home automation depending on a solar surplus. A profile holds only the settings it lists; applying it changes those like `PATCH /api/v2/settings` and needs **no restart** (pool mode and balance included).
+Up to 5 named sets of ASIC and fan settings to switch between, e.g. from a home automation: faster with a solar surplus, quieter at night. A profile holds only the settings it lists; applying it changes those like `PATCH /api/v2/settings` and needs **no restart**. Pool settings are not part of a profile.
+
+A device that never had profiles (new, or updated from a version without them) gets a profile `default` with its current settings on the first profiles request, marked active.
 
 Settings a profile may hold (names as in `PATCH /api/v2/settings`; other members are dropped when saving):
 
@@ -380,8 +382,6 @@ Settings a profile may hold (names as in `PATCH /api/v2/settings`; other members
 |---|---|---|
 | `frequency` | number | ASIC frequency in MHz (> 0) |
 | `coreVoltage` | number | core voltage in mV (> 0) |
-| `poolMode` | number | `0` failover, `1` dual pool |
-| `poolBalance` | number | 1–99, percent for the primary pool (dual pool) |
 | `fans` | array | up to 2 channels: `mode`, `manualSpeed`, `overheatTemp`, `pid` (`targetTemp`, `p`, `i`, `d`) |
 
 #### `GET /api/v2/profiles`
@@ -392,7 +392,7 @@ Settings a profile may hold (names as in `PATCH /api/v2/settings`; other members
   "active": 1,
   "profiles": [
     { "id": 0, "name": "Normal", "settings": { "frequency": 600, "coreVoltage": 1120 } },
-    { "id": 1, "name": "OC", "settings": { "frequency": 1000, "coreVoltage": 1350, "poolMode": 1, "poolBalance": 70 } }
+    { "id": 1, "name": "Quiet", "settings": { "frequency": 525, "coreVoltage": 1085, "fans": [{ "mode": 0, "manualSpeed": 40 }] } }
   ]
 }
 ```
@@ -422,7 +422,7 @@ Applies a stored profile. **No OTP**: it only selects one of the stored profiles
 { "id": 1 }
 ```
 
-**Response**: `{"id": 1, "name": "OC"}`; `400` for an unknown id.
+**Response**: `{"id": 1, "name": "Quiet"}`; `400` for an unknown id.
 
 ---
 

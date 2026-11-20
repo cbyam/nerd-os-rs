@@ -1,11 +1,9 @@
 import { ISettingsV2Fan } from './ISettingsV2';
 
-/** The settings a profile may hold (a subset of PATCH /api/v2/settings). */
+/** The settings a profile may hold (a subset of PATCH /api/v2/settings: ASIC and fans). */
 export interface IProfileSettings {
     frequency?: number;
     coreVoltage?: number;
-    poolMode?: number;
-    poolBalance?: number;
     fans?: Partial<ISettingsV2Fan>[];
 }
 

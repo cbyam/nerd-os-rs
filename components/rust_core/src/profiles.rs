@@ -1,9 +1,9 @@
-//! Settings profiles: up to [`MAX_PROFILES`] named sets of settings that a
-//! home automation switches between (e.g. overclocked while the PV system
-//! has a surplus, normal otherwise). A profile holds a subset of the
-//! `PATCH /api/v2/settings` body (see [`KEYS`]); applying it goes the same
-//! way as that PATCH, so frequency, voltage, fans, pool mode and balance
-//! take effect without a restart.
+//! Settings profiles: up to [`MAX_PROFILES`] named sets of ASIC and fan
+//! settings that a home automation switches between (e.g. overclocked while
+//! the PV system has a surplus, quieter at night). A profile holds a subset
+//! of the `PATCH /api/v2/settings` body (see [`KEYS`]); applying it goes the
+//! same way as that PATCH and takes effect without a restart. Pool settings
+//! are not part of a profile.
 //!
 //! The profiles are one JSON array in their own NVS blob; applying one only
 //! writes the normal config (and the index of the profile last applied).
@@ -30,13 +30,7 @@ pub const MAX_NAME: usize = 32;
 pub const MAX_BLOB: usize = 2048;
 
 /// The settings a profile may hold (`PATCH /api/v2/settings` names).
-pub const KEYS: [&str; 5] = [
-    "frequency",
-    "coreVoltage",
-    "fans",
-    "poolMode",
-    "poolBalance",
-];
+pub const KEYS: [&str; 3] = ["frequency", "coreVoltage", "fans"];
 /// The members of a fan channel, and of its `pid` object.
 const FAN_KEYS: [&str; 3] = ["mode", "manualSpeed", "overheatTemp"];
 const PID_KEYS: [&str; 4] = ["targetTemp", "p", "i", "d"];
@@ -141,8 +135,6 @@ pub fn settings(v: &Json) -> Option<Json> {
     for (k, v) in pick(v, &KEYS) {
         let v = match k.as_slice() {
             b"frequency" | b"coreVoltage" => is_uint(&v, 1, 0xffff).then_some(v)?,
-            b"poolMode" => is_uint(&v, 0, 1).then_some(v)?,
-            b"poolBalance" => is_uint(&v, 1, 99).then_some(v)?,
             _ => {
                 let fans = v.as_array()?;
                 if fans.len() > 2 {
@@ -269,13 +261,9 @@ fn with<T>(f: impl FnOnce(&mut Vec<Profile>) -> T) -> T {
 }
 
 /// The profile settings of a `GET /api/v2/settings` document: frequency,
-/// core voltage, pool mode, the balance in dual pool mode, the fans.
+/// core voltage, the fans.
 pub fn from_settings(doc: &Json) -> Option<Json> {
-    let mut keep: Vec<&str> = vec!["frequency", "coreVoltage", "poolMode", "fans"];
-    if doc.get("poolMode").as_uint(1) == Some(1) {
-        keep.push("poolBalance");
-    }
-    settings(&Json::Obj(pick(doc, &keep)))
+    settings(doc)
 }
 
 /// Creates the profile "default" from `current()` (the settings document)
@@ -512,7 +500,7 @@ mod tests {
         assert_eq!(list[0].name, b"OC");
         assert_eq!(
             String::from_utf8(list[0].settings.serialize()).unwrap(),
-            r#"{"frequency":1000,"coreVoltage":1350,"poolMode":1,"poolBalance":70,"fans":[{"mode":2,"pid":{"targetTemp":60,"p":6}}]}"#
+            r#"{"frequency":1000,"coreVoltage":1350,"fans":[{"mode":2,"pid":{"targetTemp":60,"p":6}}]}"#
         );
         // stored and read back unchanged
         assert_eq!(parse_stored(&serialize(&list)), list);
@@ -546,7 +534,11 @@ mod tests {
         };
         // failover: no balance
         let s = from_settings(&doc()).unwrap();
-        assert!(s.get("poolBalance").is_null() && s.get("hostname").is_null());
+        assert!(
+            s.get("poolMode").is_null()
+                && s.get("poolBalance").is_null()
+                && s.get("hostname").is_null()
+        );
         assert_eq!(s.get("frequency").as_uint(0xffff), Some(600));
         // never stored: "default" is created and marked active
         *PROFILES.lock().unwrap() = None;
@@ -588,8 +580,6 @@ mod tests {
         for bad in [
             r#"{"frequency":0}"#,
             r#"{"frequency":"600"}"#,
-            r#"{"poolMode":2}"#,
-            r#"{"poolBalance":100}"#,
             r#"{"fans":[{},{},{}]}"#,
             r#"{"fans":[{"manualSpeed":101}]}"#,
             r#"{"fans":[{"pid":{"p":"x"}}]}"#,
@@ -658,13 +648,14 @@ mod tests {
             .unwrap_or_else(|e| e.into_inner());
         let list = parse_patch(
             br#"{"profiles":[{"name":"Normal","settings":{"frequency":600,"coreVoltage":1120}},
-                {"name":"Dual","settings":{"poolMode":1,"poolBalance":30}}]}"#,
+                {"name":"Quiet","settings":{"poolMode":1,"poolBalance":30,"fans":[{"mode":0,"manualSpeed":40}]}}]}"#,
         )
         .unwrap();
         assert!(store(list));
         let mut r = Rec::default();
-        assert_eq!(apply(1, &mut r).as_deref(), Some(&b"Dual"[..]));
-        assert_eq!(r.0, ["pool_mode=1", "pool_balance=30", "profile_act=1"]);
+        assert_eq!(apply(1, &mut r).as_deref(), Some(&b"Quiet"[..]));
+        // the pool settings are not part of a profile
+        assert_eq!(r.0, ["autofanspeed=0", "fanspeed=40", "profile_act=1"]);
         let mut r = Rec::default();
         assert_eq!(apply(0, &mut r).as_deref(), Some(&b"Normal"[..]));
         assert!(

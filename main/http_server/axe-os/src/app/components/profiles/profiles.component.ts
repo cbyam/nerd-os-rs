@@ -59,8 +59,6 @@ export class ProfilesComponent implements OnInit {
     return {
       frequency: c.frequency,
       coreVoltage: c.coreVoltage,
-      poolMode: c.poolMode,
-      ...(c.poolMode === 1 ? { poolBalance: c.poolBalance || 50 } : {}),
       fans: (c.fans ?? []).map(f => ({
         mode: f.mode, manualSpeed: f.manualSpeed, overheatTemp: f.overheatTemp,
         pid: { targetTemp: f.pid.targetTemp, p: f.pid.p, i: f.pid.i, d: f.pid.d },

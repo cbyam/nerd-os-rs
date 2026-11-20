@@ -49,39 +49,6 @@
                 </div>
             </nb-card-header>
             <nb-card-body>
-                <h6 class="profile-section">{{ 'SETTINGS.POOL_MODE' | translate }}</h6>
-                <div class="form-row">
-                    <label class="form-label">{{ 'SETTINGS.POOL_MODE' | translate }}:</label>
-                    <div class="form-control-wrapper">
-                        <nb-select formControlName="poolMode">
-                            <nb-option [value]="0">
-                                {{ 'SETTINGS.POOL_MODE_FAILOVER' | translate }}
-                            </nb-option>
-                            <nb-option [value]="1">
-                                {{ 'SETTINGS.POOL_MODE_DUAL' | translate }}
-                            </nb-option>
-                        </nb-select>
-                    </div>
-                </div>
-                <div class="form-row" *ngIf="form.controls['poolMode'].value === 1">
-                    <label class="form-label">
-                        {{ 'SETTINGS.POOL_BALANCE' | translate }}<br />
-                        ({{ form.controls['poolBalance'].value }}% /
-                        {{ 100 - form.controls['poolBalance'].value }}%)
-                    </label>
-                    <div class="form-control-wrapper">
-                        <div class="progress-wrap">
-                            <input type="range" class="progress" formControlName="poolBalance" min="1" max="99"
-                                step="1" />
-                            <div class="progress-foreground" style="width: 100%;">
-                            </div>
-                        </div>
-                        <small class="text-hint">
-                            {{ 'SETTINGS.POOL_BALANCE_HINT' | translate }}
-                        </small>
-                    </div>
-                </div>
-                <hr class="profile-divider" />
                 <h6 class="profile-section">{{ 'SETTINGS.MINING_SETTINGS' | translate }}</h6>
                 <div class="d-flex justify-content-end"><app-advanced-toggle (advancedToggled)="setDevToolsOpen($event)"></app-advanced-toggle></div>
                 <ng-container *ngIf="supportLevel === 0">
@@ -318,6 +285,37 @@
             </nb-card-header>
             <nb-card-body>
 
+                <div class="form-row">
+                    <label class="form-label">{{ 'SETTINGS.POOL_MODE' | translate }}:</label>
+                    <div class="form-control-wrapper">
+                        <nb-select formControlName="poolMode">
+                            <nb-option [value]="0">
+                                {{ 'SETTINGS.POOL_MODE_FAILOVER' | translate }}
+                            </nb-option>
+                            <nb-option [value]="1">
+                                {{ 'SETTINGS.POOL_MODE_DUAL' | translate }}
+                            </nb-option>
+                        </nb-select>
+                    </div>
+                </div>
+                <div class="form-row" *ngIf="form.controls['poolMode'].value === 1">
+                    <label class="form-label">
+                        {{ 'SETTINGS.POOL_BALANCE' | translate }}<br />
+                        ({{ form.controls['poolBalance'].value }}% /
+                        {{ 100 - form.controls['poolBalance'].value }}%)
+                    </label>
+                    <div class="form-control-wrapper">
+                        <div class="progress-wrap">
+                            <input type="range" class="progress" formControlName="poolBalance" min="1" max="99"
+                                step="1" />
+                            <div class="progress-foreground" style="width: 100%;">
+                            </div>
+                        </div>
+                        <small class="text-hint">
+                            {{ 'SETTINGS.POOL_BALANCE_HINT' | translate }}
+                        </small>
+                    </div>
+                </div>
                 <div class="form-row">
                     <nb-checkbox formControlName="stratumKeep">{{ 'MISC.STRATUM_KEEPALIVE' | translate }}</nb-checkbox>
                 </div>
