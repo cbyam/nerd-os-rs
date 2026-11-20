@@ -21,7 +21,10 @@
 //!   while the task reloads its config reads a consistent user name;
 //! - the protocol (v1 or v2) can change at runtime: the stratum task builds
 //!   the new transport and session between two connections, so switching
-//!   needs no restart.
+//!   needs no restart;
+//! - failover and dual pool mode can change at runtime too
+//!   (`load_settings()`): the policy and the statistics switch mode and
+//!   the pools are connected as the new mode wants.
 
 use core::ffi::{c_char, c_int, c_void, CStr};
 use std::ffi::CString;
@@ -807,7 +810,8 @@ unsafe extern "C" fn sv2_extended_job(
 // the manager
 
 pub struct Manager {
-    dual: bool,
+    /// dual pool mode (changed by `load_settings()`)
+    dual: AtomicBool,
     policy: &'static policy::Handle,
     stats: &'static stats::Handle,
     coinbase: &'static cb::Handle,
@@ -927,7 +931,7 @@ impl Manager {
     fn new(dual: bool) -> Self {
         // SAFETY: new handles, kept for the lifetime of the firmware
         Manager {
-            dual,
+            dual: AtomicBool::new(dual),
             policy: unsafe { &*policy::pool_policy_new(dual) },
             stats: unsafe {
                 &*stats::pool_stats_new(
@@ -946,6 +950,10 @@ impl Manager {
 
     fn lock(&self) -> MutexGuard<'_, [PoolConfig; 2]> {
         lock(&self.configs)
+    }
+
+    pub fn is_dual(&self) -> bool {
+        self.dual.load(Acquire)
     }
 
     fn task(&self, pool: usize) -> Option<&'static Task> {
@@ -1186,7 +1194,7 @@ impl Manager {
     pub fn select_asic_diff(&self, pool: c_int, pool_diff: u32) -> u32 {
         let (min, max) = unsafe {
             (
-                sys::bapi_asic_min_difficulty(self.dual),
+                sys::bapi_asic_min_difficulty(self.is_dual()),
                 sys::bapi_asic_max_difficulty(),
             )
         };
@@ -1244,7 +1252,9 @@ impl Manager {
     pub fn load_settings(&self) {
         let mut cfg = self.lock();
         let mut reconnect = false;
-        if self.dual {
+        let (mode, _) = crate::boot::pool_mode(crate::cfg::pool_mode() as c_int);
+        self.set_mode(mode == crate::boot::PoolMode::Dual);
+        if self.is_dual() {
             // a changed balance resets the dithering and reconnects
             let balance = config::get_u16(b"pool_balance", 50);
             unsafe {
@@ -1277,6 +1287,72 @@ impl Manager {
             }
             if self.pings[i].load(Acquire) {
                 crate::ping::reset(i as c_int);
+            }
+        }
+    }
+
+    /// Switches between failover and dual pool mode (with the lock held):
+    /// policy and statistics in the new mode, then the pools connected as
+    /// the new mode wants.
+    fn set_mode(&self, dual: bool) {
+        let balance = config::get_u16(b"pool_balance", 50);
+        if !unsafe { policy::pool_policy_set_mode(self.policy, dual, balance) } {
+            return;
+        }
+        log!(
+            Info,
+            TAG,
+            "pool mode changed to {}",
+            if dual { "Dual Pool" } else { "Failover" }
+        );
+        unsafe {
+            stats::pool_stats_set_mode(self.stats, dual);
+            stats::pool_stats_set_balance(self.stats, balance);
+        }
+        self.dual.store(dual, Release);
+        if !self.initialized.load(Acquire) {
+            // the manager task connects the pools of the mode it starts in
+            return;
+        }
+        // the jobs of a pool that stays connected stay valid; a dropped
+        // pool's jobs go when its connection ends (policy: disconnected)
+        let s = self.state();
+        if dual {
+            // both pools: the connected one keeps its connection
+            for i in 0..2 {
+                if let Some(t) = self.task(i) {
+                    t.stop.store(false, Release);
+                    t.start_timer();
+                }
+            }
+        } else {
+            // the policy picks the pool to keep from the connected ones
+            // (the primary first) and drops the other
+            for i in 0..2 {
+                if s.connected[i] {
+                    let a = unsafe { policy::pool_policy_connected(self.policy, i as i32, &s) };
+                    self.apply(&a);
+                    if s.connected[0] {
+                        break;
+                    }
+                }
+            }
+            // a primary that is not connected: try it, and the secondary
+            // as its fallback
+            if !s.connected[0] {
+                if let Some(t) = self.task(0) {
+                    t.stop.store(false, Release);
+                    t.start_timer();
+                }
+                if let Some(t) = self.task(1) {
+                    t.start_timer();
+                }
+            }
+        }
+        // a stopped pool leaves its protocol loop
+        for i in 0..2 {
+            if let Some(t) = self.task(i).filter(|t| t.stop.load(Acquire)) {
+                t.trigger_reconnect();
             }
         }
     }
@@ -1389,15 +1465,15 @@ impl Manager {
                 encrypted: cfg[i].is_sv2() || cfg[i].tls,
             }
         };
-        let fallback = !self.dual;
+        let fallback = !self.is_dual();
         ManagerInfo {
             config_pool_mode: config::get_u16(b"pool_mode", 0),
-            pool_mode: self.dual as c_int,
+            pool_mode: self.is_dual() as c_int,
             pool_balance: config::get_u16(b"pool_balance", 50),
             total_best_diff: sum.total_best,
             fallback,
             using_fallback: fallback && self.selected() == 1,
-            dual: self.dual,
+            dual: self.is_dual(),
             selected: self.selected(),
             pools: [pool(0), pool(1)],
             accepted: sum.accepted,
@@ -1420,7 +1496,11 @@ impl Manager {
             Info,
             T,
             "{} mode enabled",
-            if self.dual { "Dual Pool" } else { "Failover" }
+            if self.is_dual() {
+                "Dual Pool"
+            } else {
+                "Failover"
+            }
         );
 
         for i in 0..2 {
@@ -1454,7 +1534,7 @@ impl Manager {
             };
         }
 
-        let first = if self.dual { 2 } else { 1 };
+        let first = if self.is_dual() { 2 } else { 1 };
         for i in 0..first {
             if let Some(t) = self.task(i) {
                 t.stop.store(false, Release);
@@ -1592,7 +1672,7 @@ pub(crate) mod ffi {
 
     #[no_mangle]
     pub extern "C" fn pool_mgr_is_dual() -> bool {
-        m().is_some_and(|m| m.dual)
+        m().is_some_and(|m| m.is_dual())
     }
 
     #[no_mangle]
@@ -1727,7 +1807,7 @@ pub(crate) mod ffi {
 
     #[no_mangle]
     pub extern "C" fn pool_mgr_using_fallback() -> bool {
-        m().is_some_and(|m| !m.dual && m.selected() == 1)
+        m().is_some_and(|m| !m.is_dual() && m.selected() == 1)
     }
 
     #[no_mangle]
@@ -1779,6 +1859,46 @@ mod tests {
             let _ = m.tasks[i].set(t);
         }
         m
+    }
+
+    #[test]
+    fn mode_switch_connects_the_pools_of_the_new_mode() {
+        let _g = crate::config::tests::LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let m = manager(false);
+        m.initialized.store(true, Release);
+        let (t0, t1) = (m.task(0).unwrap(), m.task(1).unwrap());
+        // failover, the primary mining
+        t0.stop.store(false, Release);
+        t0.connected.store(true, Release);
+        {
+            let _l = m.lock();
+            m.set_mode(true);
+        }
+        assert!(m.is_dual());
+        assert!(!t0.stop.load(Acquire) && !t1.stop.load(Acquire));
+        assert!(!t0.reconnect.load(Acquire));
+        // dual, both connected: back to failover keeps the primary
+        t1.connected.store(true, Release);
+        {
+            let _l = m.lock();
+            m.set_mode(false);
+        }
+        assert!(!m.is_dual());
+        assert!(!t0.stop.load(Acquire) && !t0.reconnect.load(Acquire));
+        assert!(t1.stop.load(Acquire) && t1.reconnect.load(Acquire));
+        // only the secondary connected: failover keeps it, retries the primary
+        t0.connected.store(false, Release);
+        t1.stop.store(false, Release);
+        t1.reconnect.store(false, Release);
+        {
+            let _l = m.lock();
+            m.set_mode(true);
+            m.set_mode(false);
+        }
+        assert!(!t1.stop.load(Acquire) && !t0.stop.load(Acquire));
+        assert_eq!(m.selected(), 1);
     }
 
     #[test]
