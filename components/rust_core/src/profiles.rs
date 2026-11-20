@@ -7,6 +7,10 @@
 //!
 //! The profiles are one JSON array in their own NVS blob; applying one only
 //! writes the normal config (and the index of the profile last applied).
+//! When there has never been a profile (no blob yet: a new device or the
+//! first start of this firmware), a profile "default" with the current
+//! settings is created and marked active; a list emptied by the user stays
+//! empty.
 //!
 //! Applying needs no OTP: it only selects one of the stored profiles.
 //! Changing the profiles needs OTP like any other setting.
@@ -260,23 +264,67 @@ static PROFILES: Mutex<Option<Vec<Profile>>> = Mutex::new(None);
 
 fn with<T>(f: impl FnOnce(&mut Vec<Profile>) -> T) -> T {
     let mut p = PROFILES.lock().unwrap_or_else(|e| e.into_inner());
-    let list = p.get_or_insert_with(|| parse_stored(&nvs::read()));
+    let list = p.get_or_insert_with(|| nvs::read().map_or_else(Vec::new, |d| parse_stored(&d)));
     f(list)
+}
+
+/// The profile settings of a `GET /api/v2/settings` document: frequency,
+/// core voltage, pool mode, the balance in dual pool mode, the fans.
+pub fn from_settings(doc: &Json) -> Option<Json> {
+    let mut keep: Vec<&str> = vec!["frequency", "coreVoltage", "poolMode", "fans"];
+    if doc.get("poolMode").as_uint(1) == Some(1) {
+        keep.push("poolBalance");
+    }
+    settings(&Json::Obj(pick(doc, &keep)))
+}
+
+/// Creates the profile "default" from `current()` (the settings document)
+/// if there has never been a profile; loads the profiles.
+pub fn ensure_default(current: impl FnOnce() -> Json) {
+    let mut p = PROFILES.lock().unwrap_or_else(|e| e.into_inner());
+    if p.is_some() {
+        return;
+    }
+    let list = match nvs::read() {
+        Some(d) => parse_stored(&d),
+        None => match from_settings(&current()) {
+            Some(settings) => {
+                let list = vec![Profile {
+                    name: b"default".to_vec(),
+                    settings,
+                }];
+                if nvs::write(&serialize(&list)) {
+                    log!(Info, TAG, "profile \"default\" created");
+                    config::set(ACTIVE_KEY, Json::Num(Num::U(0)));
+                    crate::config_nvs::request_flush();
+                }
+                list
+            }
+            None => Vec::new(),
+        },
+    };
+    *p = Some(list);
 }
 
 #[cfg(target_os = "espidf")]
 mod nvs {
     use super::*;
     use crate::idf::nvs::{err_name, Nvs, READONLY, READWRITE};
-    use crate::idf::ESP_OK;
+    use crate::idf::{EspErr, ESP_OK};
 
     const NAMESPACE: &CStr = c"main";
     const KEY: &CStr = c"profiles";
 
-    pub fn read() -> Vec<u8> {
-        Nvs::open(NAMESPACE, READONLY)
-            .and_then(|n| n.get_blob(KEY))
-            .unwrap_or_default()
+    /// None: there is no stored list (never saved).
+    pub fn read() -> Option<Vec<u8>> {
+        match Nvs::open(NAMESPACE, READONLY).and_then(|n| n.get_blob(KEY)) {
+            Ok(d) => Some(d),
+            Err(e) if e == crate::idf::raw::ESP_ERR_NVS_NOT_FOUND as EspErr => None,
+            Err(e) => {
+                log!(Error, TAG, "reading the profiles failed: {}", err_name(e));
+                Some(Vec::new())
+            }
+        }
     }
 
     pub fn write(data: &[u8]) -> bool {
@@ -302,14 +350,14 @@ mod nvs {
 mod nvs {
     use std::sync::Mutex;
 
-    static BLOB: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+    pub static BLOB: Mutex<Option<Vec<u8>>> = Mutex::new(None);
 
-    pub fn read() -> Vec<u8> {
+    pub fn read() -> Option<Vec<u8>> {
         BLOB.lock().unwrap().clone()
     }
 
     pub fn write(data: &[u8]) -> bool {
-        *BLOB.lock().unwrap() = data.to_vec();
+        *BLOB.lock().unwrap() = Some(data.to_vec());
         true
     }
 }
@@ -392,6 +440,7 @@ pub mod http {
     /// # Safety
     /// `req` a request of a route with the server context.
     pub unsafe extern "C" fn get(req: *mut Req) -> EspErr {
+        ensure_default(crate::http_data::v2_settings_doc);
         let (l, a) = list();
         send_doc(req, to_json(&l, a))
     }
@@ -401,6 +450,7 @@ pub mod http {
     /// # Safety
     /// `req` a request of a route with the server context.
     pub unsafe extern "C" fn patch(req: *mut Req) -> EspErr {
+        ensure_default(crate::http_data::v2_settings_doc);
         let Some(b) = body(req) else {
             return ESP_FAIL;
         };
@@ -424,6 +474,7 @@ pub mod http {
     /// # Safety
     /// `req` a request of a route with the server context.
     pub unsafe extern "C" fn apply(req: *mut Req) -> EspErr {
+        ensure_default(crate::http_data::v2_settings_doc);
         let Some(b) = body(req) else {
             return ESP_FAIL;
         };
@@ -479,6 +530,38 @@ mod tests {
         let fans = list[0].settings.get("fans");
         assert_eq!(fans.at(1).get("mode").as_uint(3), Some(3));
         assert!(fans.at(0).get("label").is_null());
+    }
+
+    #[test]
+    fn default_profile_once() {
+        let _g = crate::config::tests::LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let doc = || {
+            ajson::deserialize(
+                br#"{"hostname":"x","frequency":600,"coreVoltage":1150,"poolMode":0,"poolBalance":0,
+                "fans":[{"label":"M2","mode":3,"manualSpeed":100,"overheatTemp":70,"pid":{"targetTemp":-1,"p":6,"i":0.1,"d":10}}]}"#,
+            )
+            .unwrap()
+        };
+        // failover: no balance
+        let s = from_settings(&doc()).unwrap();
+        assert!(s.get("poolBalance").is_null() && s.get("hostname").is_null());
+        assert_eq!(s.get("frequency").as_uint(0xffff), Some(600));
+        // never stored: "default" is created and marked active
+        *PROFILES.lock().unwrap() = None;
+        *nvs::BLOB.lock().unwrap() = None;
+        ensure_default(doc);
+        let (l, a) = list();
+        assert_eq!(
+            (l.len(), l[0].name.as_slice(), a),
+            (1, &b"default"[..], Some(0))
+        );
+        // emptied by the user: stays empty, also after loading again
+        assert!(store(vec![]));
+        *PROFILES.lock().unwrap() = None;
+        ensure_default(doc);
+        assert!(list().0.is_empty());
     }
 
     #[test]

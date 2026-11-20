@@ -130,3 +130,9 @@ Tested with the first release (v2.0.0-alpha.1): the CI upload into `webflasher-r
 
 Still to test:
 - the updater listing the releases and the factory update from one of them.
+
+## Settings profiles: the profile "default"
+
+On the first access to the profiles of a device that never had profiles (no `profiles` blob in NVS: a new device or one updated from v2.0.0-alpha.1 or the C firmware), the profile "default" is created from the current settings and marked active.
+
+Tested on hardware: a NerdQAxe++ updated over OTA from v2.0.0-alpha.1 got "default" (its 600 MHz / 1150 mV, failover without a balance, both fans) marked active; a Q1373 whose list exists kept it unchanged.
