@@ -103,7 +103,8 @@ fn fan(v: &Json) -> Option<Json> {
     }
     let mut out = pick(v, &FAN_KEYS);
     let ok = out.iter().all(|(k, v)| match k.as_slice() {
-        b"mode" => is_uint(v, 0, 2),
+        // 0 manual, 1 automatic, 2 PID, 3 (second fan) as the first fan
+        b"mode" => is_uint(v, 0, 3),
         b"manualSpeed" => is_uint(v, 0, 100),
         _ => is_uint(v, 1, 0xffff),
     });
@@ -116,10 +117,8 @@ fn fan(v: &Json) -> Option<Json> {
             return None;
         }
         let p = pick(pid, &PID_KEYS);
-        let ok = p.iter().all(|(k, v)| match k.as_slice() {
-            b"targetTemp" => is_uint(v, 1, 0xffff),
-            _ => is_number(v),
-        });
+        // targetTemp is -1 on boards without PID control (not applied then)
+        let ok = p.iter().all(|(_, v)| is_number(v));
         if !ok {
             return None;
         }
@@ -469,6 +468,20 @@ mod tests {
     }
 
     #[test]
+    fn takes_the_fans_the_device_reports() {
+        // GET /api/v2/settings of a Q1373: the second fan follows the first
+        let fans = r#"[{"label":"M2","mode":2,"manualSpeed":100,"overheatTemp":70,"pid":{"targetTemp":60,"p":6,"i":0.1,"d":10}},
+            {"label":"M1","mode":3,"manualSpeed":100,"overheatTemp":70,"pid":{"targetTemp":-1,"p":6,"i":0.1,"d":10}}]"#;
+        let body = format!(
+            r#"{{"profiles":[{{"name":"Now","settings":{{"frequency":425,"coreVoltage":1010,"poolMode":1,"poolBalance":70,"fans":{fans}}}}}]}}"#
+        );
+        let list = parse_patch(body.as_bytes()).unwrap();
+        let fans = list[0].settings.get("fans");
+        assert_eq!(fans.at(1).get("mode").as_uint(3), Some(3));
+        assert!(fans.at(0).get("label").is_null());
+    }
+
+    #[test]
     fn refuses_invalid_lists() {
         let p = |s: &str| parse_patch(s.as_bytes());
         assert_eq!(p("{"), Err(Error::InvalidJson));
@@ -497,6 +510,7 @@ mod tests {
             r#"{"fans":[{},{},{}]}"#,
             r#"{"fans":[{"manualSpeed":101}]}"#,
             r#"{"fans":[{"pid":{"p":"x"}}]}"#,
+            r#"{"fans":[{"mode":4}]}"#,
             "[]",
         ] {
             assert_eq!(
