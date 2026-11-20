@@ -370,6 +370,62 @@ Send a test message to the configured webhook. Requires OTP.
 
 ---
 
+### Profiles
+
+Up to 5 named sets of settings to switch between, e.g. from a home automation depending on a solar surplus. A profile holds only the settings it lists; applying it changes those like `PATCH /api/v2/settings` and needs **no restart** (pool mode and balance included).
+
+Settings a profile may hold (names as in `PATCH /api/v2/settings`; other members are dropped when saving):
+
+| Field | Type | Values |
+|---|---|---|
+| `frequency` | number | ASIC frequency in MHz (> 0) |
+| `coreVoltage` | number | core voltage in mV (> 0) |
+| `poolMode` | number | `0` failover, `1` dual pool |
+| `poolBalance` | number | 1–99, percent for the primary pool (dual pool) |
+| `fans` | array | up to 2 channels: `mode`, `manualSpeed`, `overheatTemp`, `pid` (`targetTemp`, `p`, `i`, `d`) |
+
+#### `GET /api/v2/profiles`
+
+```json
+{
+  "max": 5,
+  "active": 1,
+  "profiles": [
+    { "id": 0, "name": "Normal", "settings": { "frequency": 600, "coreVoltage": 1120 } },
+    { "id": 1, "name": "OC", "settings": { "frequency": 1000, "coreVoltage": 1350, "poolMode": 1, "poolBalance": 70 } }
+  ]
+}
+```
+
+`active` is the profile applied last (`null`: none, or it was deleted). It stays set when settings are changed by hand afterwards.
+
+#### `PATCH /api/v2/profiles`
+
+Replaces **all** profiles. Requires OTP. The ids are the positions in the list.
+
+```json
+{
+  "profiles": [
+    { "name": "Normal", "settings": { "frequency": 600, "coreVoltage": 1120 } },
+    { "name": "OC", "settings": { "frequency": 1000, "coreVoltage": 1350 } }
+  ]
+}
+```
+
+**Response**: the profiles as from `GET`. `400` with a message for invalid JSON, more than 5 profiles, a missing name (1–32 characters) or invalid settings.
+
+#### `POST /api/v2/profiles/apply`
+
+Applies a stored profile. **No OTP**: it only selects one of the stored profiles (like restart and shutdown, for home automations that cannot supply a TOTP code).
+
+```json
+{ "id": 1 }
+```
+
+**Response**: `{"id": 1, "name": "OC"}`; `400` for an unknown id.
+
+---
+
 ### InfluxDB
 
 #### `GET /api/v2/influx`

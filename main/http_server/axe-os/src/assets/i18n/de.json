@@ -602,5 +602,31 @@
     "COINBASE_MAX_FEE": "Max. Pool-Gebühr",
     "COINBASE_MAX_FEE_HINT": "Die Verifizierung schlägt fehl, wenn der Pool-Anteil an der Coinbase-Belohnung diesen Prozentsatz überschreitet (z. B. 3 für ckpools 3 % Gebühr).",
     "COINBASE_RECONNECT_HINT": "Beim Speichern wird die Verbindung zum Pool kurz getrennt und neu aufgebaut, um die neuen Einstellungen zu übernehmen."
+  },
+  "PROFILES": {
+    "TITLE": "Profile",
+    "DESCRIPTION": "Benannte Einstellungs-Sets zum Umschalten, z. B. übertaktet, solange die PV-Anlage Überschuss hat. Ein Profil ändert nur die Einstellungen, die es enthält; der Wechsel wirkt ohne Neustart.",
+    "NONE": "Noch keine Profile.",
+    "EMPTY": "keine Einstellungen",
+    "ACTIVE": "aktiv",
+    "APPLY": "Anwenden",
+    "ADD": "Profil hinzufügen",
+    "NAME": "Name",
+    "INCLUDE_ASIC": "Frequenz und Kernspannung",
+    "FREQUENCY": "Frequenz",
+    "CORE_VOLTAGE": "Kernspannung",
+    "INCLUDE_POOL": "Pool-Modus",
+    "INCLUDE_FANS": "Lüftereinstellungen (die aktuellen)",
+    "FROM_CURRENT": "Aktuelle Werte übernehmen",
+    "CANCEL": "Abbrechen",
+    "SAVE": "Speichern",
+    "SAVED": "Profile gespeichert",
+    "SAVE_FAILED": "Speichern der Profile fehlgeschlagen",
+    "APPLIED": "Profil \"{{name}}\" angewendet",
+    "APPLY_FAILED": "Anwenden des Profils fehlgeschlagen",
+    "FAILOVER": "Failover",
+    "DUAL": "Dual-Pool",
+    "FANS": "Lüfter",
+    "API_HINT": "Hausautomation (ohne OTP):"
   }
 }

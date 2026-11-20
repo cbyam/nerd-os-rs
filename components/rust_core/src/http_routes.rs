@@ -63,6 +63,9 @@ pub enum Handler {
     OtaGithubPost,
     OtaGithubGet,
     File,
+    ProfilesGet,
+    ProfilesPatch,
+    ProfileApply,
 }
 
 /// What runs before the handler, and when the route exists.
@@ -129,7 +132,7 @@ const API: u16 = CLOSE | NET | CORS | CTX;
 const PREFLIGHT: u16 = CLOSE | NET | CORS;
 
 /// The routes in registration order.
-pub static ROUTES: [Route; 45] = [
+pub static ROUTES: [Route; 50] = [
     r(c"/recovery", Get, H::Recovery, CLOSE | NET | CTX),
     r(c"/api/system/info", Get, H::SystemInfo, API),
     r(c"/api/system/asic", Get, H::SystemAsic, API),
@@ -193,6 +196,12 @@ pub static ROUTES: [Route; 45] = [
     r(c"/api/v2/alert", Get, H::AlertGet, API),
     r(c"/api/v2/alert", Patch, H::AlertPatch, API | OTP),
     r(c"/api/v2/alert/test", Post, H::AlertTest, API | OTP),
+    r(c"/api/v2/profiles", Get, H::ProfilesGet, API),
+    r(c"/api/v2/profiles", Patch, H::ProfilesPatch, API | OTP),
+    r(c"/api/v2/profiles", Options, H::Options, PREFLIGHT),
+    // no OTP on purpose: only selects a stored profile (home automation)
+    r(c"/api/v2/profiles/apply", Post, H::ProfileApply, API),
+    r(c"/api/v2/profiles/apply", Options, H::Options, PREFLIGHT),
     r(c"/api/system/OTA", Post, H::Ota, CLOSE | NET | OTP),
     // the web UI can be reinstalled from the recovery page without OTP
     r(
@@ -258,7 +267,12 @@ mod tests {
                 rt.handler,
                 // home automation; the handler checks allTime; enrollment
                 // and login are how OTP is set up and used
-                H::Restart | H::Shutdown | H::ResetStats | H::OtpCreate | H::OtpSession
+                H::Restart
+                    | H::Shutdown
+                    | H::ProfileApply
+                    | H::ResetStats
+                    | H::OtpCreate
+                    | H::OtpSession
             );
             if changes && !exempt {
                 assert!(needs_otp(rt, false), "{} {:?}", rt.uri(), rt.method);

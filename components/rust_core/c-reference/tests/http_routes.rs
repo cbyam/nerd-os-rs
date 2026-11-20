@@ -90,6 +90,11 @@ fn flags(ctx: &str, ws: &str, cond: &str, checks: &str) -> u16 {
     }
 }
 
+/// Routes added after the port (not in the former server).
+fn added(r: &Route) -> bool {
+    r.uri().starts_with("/api/v2/profiles")
+}
+
 #[test]
 fn routes_match_the_former_server() {
     let rows: Vec<Vec<&str>> = REF
@@ -97,8 +102,9 @@ fn routes_match_the_former_server() {
         .filter(|l| !l.starts_with('#') && !l.is_empty())
         .map(|l| l.split(' ').collect())
         .collect();
-    assert_eq!(rows.len(), ROUTES.len());
-    for (row, rt) in rows.iter().zip(ROUTES.iter()) {
+    let ported: Vec<&Route> = ROUTES.iter().filter(|r| !added(r)).collect();
+    assert_eq!(rows.len(), ported.len());
+    for (row, rt) in rows.iter().zip(ported) {
         let [uri, m, h, ctx, ws, cond, checks] = row[..] else {
             panic!("bad row {row:?}");
         };

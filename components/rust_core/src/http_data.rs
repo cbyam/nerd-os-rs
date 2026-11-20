@@ -191,7 +191,7 @@ fn running_partition() -> CString {
 }
 
 /// Reloads what a settings change touches: board, fans, display, pools.
-fn reload_settings() {
+pub(crate) fn reload_settings() {
     crate::board::ffi::board_load_settings();
     crate::power_mgmt::fan_load_settings();
     unsafe { sys::disp_load_settings() };

@@ -80,6 +80,7 @@ pub mod pool_manager;
 pub mod pool_stats;
 pub mod power_mgmt;
 pub mod power_task;
+pub mod profiles;
 pub mod sdkconfig;
 pub mod secp;
 pub mod serial;
