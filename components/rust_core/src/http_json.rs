@@ -571,6 +571,8 @@ pub struct Dashboard {
     pub shutdown: bool,
     pub board_error: c_int,
     pub overheat_temp: u16,
+    /// fan channel 1's shutdown temperature (the VR)
+    pub vr_overheat_temp: u16,
     pub hashrate_timestamp: u64,
     pub hashrate: f32,
     pub hashrate_1m: f64,
@@ -636,7 +638,16 @@ pub fn dashboard(s: &Dashboard) -> Json {
     sys.int("uptime", s.uptime_seconds)
         .bool("shutdown", s.shutdown)
         .int("boardError", s.board_error as i64)
-        .uint("overheatTemp", s.overheat_temp as u64);
+        .uint("overheatTemp", s.overheat_temp as u64)
+        // the VR shutdown runs on fan channel 1: boards with two channels
+        .uint(
+            "vrOverheatTemp",
+            if s.fan_count > 1 {
+                s.vr_overheat_temp as u64
+            } else {
+                0
+            },
+        );
     d.obj("system", sys);
 
     let mut perf = Obj::new();

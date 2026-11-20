@@ -200,6 +200,8 @@ typedef struct {
     bool shutdown;
     int board_error;
     uint16_t overheat_temp;
+    /* fan channel 1's shutdown temperature (the VR) */
+    uint16_t vr_overheat_temp;
     uint64_t hashrate_timestamp;
     float hashrate;
     double hashrate_1m;

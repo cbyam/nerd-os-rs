@@ -447,6 +447,7 @@ fn dashboard() {
             shutdown: s.shutdown,
             board_error: r.below(7) as c_int,
             overheat_temp: s.overheat_temp,
+            vr_overheat_temp: r.below(120) as u16,
             hashrate_timestamp: s.hashrate_timestamp,
             hashrate: s.hashrate,
             hashrate_1m: s.hashrate_1m,

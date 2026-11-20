@@ -1,6 +1,7 @@
 /* The former document building of GET /api/v2/dashboard, /api/v2/system and
  * /api/v2/identify (main/http_server/v2/), verbatim (extracted by a script
- * from the commit before HTTP step C3b), on the shims of get_shim.h. */
+ * from the commit before HTTP step C3b; vrOverheatTemp from upstream
+ * v1.1.3-alpha.1), on the shims of get_shim.h. */
 #include "get_shim.h"
 
 extern "C" char *ref_dashboard(const dashboard_t *snap, uint64_t start_timestamp, uint64_t current_timestamp,
@@ -21,6 +22,8 @@ extern "C" char *ref_dashboard(const dashboard_t *snap, uint64_t start_timestamp
         sys["shutdown"]     = shutdown;
         sys["boardError"]   = (int) SYSTEM_MODULE.getBoardError();
         sys["overheatTemp"] = Config::getOverheatTemp();
+        // VR shutdown runs on fan channel 1, so it only exists on boards with two channels
+        sys["vrOverheatTemp"] = (board->getNumFans() > 1) ? Config::getFanOverheatTemp(1) : 0;
     }
 
     // --- performance ---
