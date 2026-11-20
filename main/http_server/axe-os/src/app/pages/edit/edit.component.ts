@@ -85,8 +85,6 @@ export class EditComponent implements OnInit {
     'stratumKeep',
     'canMaster',
     'poolMode',
-    'stratumProtocol',
-    'fallbackStratumProtocol',
   ]);
 
   @Input() uri = '';
