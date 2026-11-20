@@ -18,12 +18,15 @@
 //!   second) instead of FreeRTOS software timers; they do not fire while
 //!   the device is shut down (the stratum tasks are suspended then anyway);
 //! - the task's copy of the pool config is locked, so a share submitted
-//!   while the task reloads its config reads a consistent user name.
+//!   while the task reloads its config reads a consistent user name;
+//! - the protocol (v1 or v2) can change at runtime: the stratum task builds
+//!   the new transport and session between two connections, so switching
+//!   needs no restart.
 
 use core::ffi::{c_char, c_int, c_void, CStr};
 use std::ffi::CString;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering::*};
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use crate::ajson::{Json, Num};
 use crate::config;
@@ -157,10 +160,51 @@ enum Proto {
     },
 }
 
+impl Proto {
+    /// A new transport and session for v2 (`sv2`) or v1.
+    fn new(sv2: bool) -> Self {
+        if sv2 {
+            Proto::V2 {
+                noise: Transport::new(Kind::Noise),
+                // SAFETY: a new session, owned by the protocol from here on
+                session: unsafe { Box::from_raw(sv2_session_new(true)) },
+                last_submit_us: Mutex::new(0),
+            }
+        } else {
+            Proto::V1 {
+                tcp: Transport::new(Kind::Tcp),
+                tls: Transport::new(Kind::Tls),
+                session: unsafe { Box::from_raw(stratum_v1_session_new()) },
+                lines: Mutex::new(LineBuffer::default()),
+            }
+        }
+    }
+
+    fn is_v2(&self) -> bool {
+        matches!(self, Proto::V2 { .. })
+    }
+
+    /// The transport of the connection (`tls`: v1 over TLS).
+    fn transport(&self, tls: bool) -> &Transport {
+        match self {
+            Proto::V1 { tcp, tls: t, .. } => {
+                if tls {
+                    t
+                } else {
+                    tcp
+                }
+            }
+            Proto::V2 { noise, .. } => noise,
+        }
+    }
+}
+
 pub struct Task {
     pool: usize,
     tag: &'static CStr,
-    proto: Proto,
+    /// replaced by the stratum task between two connections when the
+    /// protocol changes; a submit holds its own reference meanwhile
+    proto: Mutex<Arc<Proto>>,
     /// the task's copy of the pool config (`m_config`)
     config: Mutex<PoolConfig>,
     /// the pool is not to be connected (`m_stopFlag`)
@@ -182,21 +226,7 @@ pub struct Task {
 
 impl Task {
     fn new(pool: usize, config: PoolConfig) -> Self {
-        let proto = if config.is_sv2() {
-            Proto::V2 {
-                noise: Transport::new(Kind::Noise),
-                // SAFETY: a new session, owned by the task from here on
-                session: unsafe { Box::from_raw(sv2_session_new(true)) },
-                last_submit_us: Mutex::new(0),
-            }
-        } else {
-            Proto::V1 {
-                tcp: Transport::new(Kind::Tcp),
-                tls: Transport::new(Kind::Tls),
-                session: unsafe { Box::from_raw(stratum_v1_session_new()) },
-                lines: Mutex::new(LineBuffer::default()),
-            }
-        };
+        let proto = Mutex::new(Arc::new(Proto::new(config.is_sv2())));
         Task {
             pool,
             tag: if pool == 0 {
@@ -220,17 +250,32 @@ impl Task {
         }
     }
 
-    fn transport(&self) -> &Transport {
-        match &self.proto {
-            Proto::V1 { tcp, tls, .. } => {
-                if self.tls.load(Acquire) {
-                    tls
-                } else {
-                    tcp
-                }
-            }
-            Proto::V2 { noise, .. } => noise,
+    fn proto(&self) -> Arc<Proto> {
+        lock(&self.proto).clone()
+    }
+
+    /// The transport of the current connection.
+    fn transport<'a>(&self, proto: &'a Proto) -> &'a Transport {
+        proto.transport(self.tls.load(Acquire))
+    }
+
+    /// Replaces transport and session when the configured protocol is not
+    /// the current one (between connections, from the stratum task).
+    fn switch_protocol(&self, sv2: bool) -> Arc<Proto> {
+        let mut cur = lock(&self.proto);
+        if cur.is_v2() != sv2 {
+            log!(
+                Info,
+                self.tag,
+                "protocol changed to Stratum {}",
+                if sv2 { "v2" } else { "v1" }
+            );
+            // the jobs of the old protocol's session are void
+            crate::jobs::invalidate(self.pool as c_int);
+            self.valid_notify.store(false, Release);
+            *cur = Arc::new(Proto::new(sv2));
         }
+        cur.clone()
     }
 
     fn trigger_reconnect(&self) {
@@ -354,12 +399,13 @@ impl Task {
         version_rolled: u32,
         version_base: u32,
     ) {
-        match &self.proto {
+        let proto = self.proto();
+        match &*proto {
             Proto::V1 { session, .. } => {
                 // mining.submit takes the rolled bits (delta), not the version
                 let delta = version_rolled ^ version_base;
                 let user = lock(&self.config).user.clone();
-                v1::send_tracked(&mut TIo(self.transport()), &session.0, |s| {
+                v1::send_tracked(&mut TIo(self.transport(&proto)), &session.0, |s| {
                     s.submit(
                         user.to_bytes(),
                         job_id.to_bytes(),
@@ -431,6 +477,8 @@ impl Io for TIo<'_> {
 struct Ctx {
     m: &'static Manager,
     t: &'static Task,
+    /// the protocol of the current round
+    proto: Arc<Proto>,
 }
 
 impl crate::stratum_task::Hooks for Ctx {
@@ -450,6 +498,7 @@ impl crate::stratum_task::Hooks for Ctx {
         // a consistent copy of the config (it may be changed in the UI)
         let c = self.m.lock()[self.t.pool].clone();
         let r = (c.host.to_string_lossy().into_owned(), c.port as u16);
+        self.proto = self.t.switch_protocol(c.is_sv2());
         *lock(&self.t.config) = c;
         r
     }
@@ -483,14 +532,14 @@ impl crate::stratum_task::Hooks for Ctx {
     fn connect(&mut self, host: &str, ip: &str, port: u16) -> bool {
         let t = self.t;
         // the transport of this connection
-        match &t.proto {
+        match &*self.proto {
             Proto::V1 { .. } => t.tls.store(lock(&t.config).tls, Release),
             Proto::V2 { noise, .. } => t.configure_noise(noise),
         }
         let (Ok(h), Ok(i)) = (CString::new(host), CString::new(ip)) else {
             return false;
         };
-        if !t.transport().connect(&h, Some(&i), port) {
+        if !t.transport(&self.proto).connect(&h, Some(&i), port) {
             let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
             log!(
                 Error,
@@ -502,7 +551,8 @@ impl crate::stratum_task::Hooks for Ctx {
         true
     }
     fn protocol_loop(&mut self) {
-        match &self.t.proto {
+        let proto = self.proto.clone();
+        match &*proto {
             Proto::V1 { session, lines, .. } => self.v1_loop(session, lines),
             Proto::V2 {
                 session,
@@ -521,7 +571,7 @@ impl crate::stratum_task::Hooks for Ctx {
         // gate new submits before tearing the transport down; the
         // transport's lock covers a submit already inside send()
         self.t.connected.store(false, Release);
-        self.t.transport().close();
+        self.t.transport(&self.proto).close();
         self.m
             .on_event(self.t.pool, policy::pool_policy_disconnected);
     }
@@ -563,7 +613,7 @@ impl Ctx {
             session,
         };
         v1::run(
-            &mut TIo(t.transport()),
+            &mut TIo(t.transport(&self.proto)),
             &mut hooks,
             &setup,
             &session.0,
@@ -647,7 +697,8 @@ unsafe extern "C" fn sv2_link(
     noise: *mut *mut c_void,
     t: *mut *mut c_void,
 ) -> bool {
-    let tr = ctx(p).t.transport();
+    let c = ctx(p);
+    let tr = c.t.transport(&c.proto);
     *noise = tr.noise_ctx();
     *t = tr.handle().cast();
     !(*noise).is_null() && !(*t).is_null()
@@ -670,7 +721,7 @@ unsafe extern "C" fn sv2_drain_events(p: *mut c_void) {
         session,
         last_submit_us,
         ..
-    } = &c.t.proto
+    } = &*c.proto
     else {
         return;
     };
@@ -1449,7 +1500,11 @@ unsafe extern "C" fn stratum_task_entry(arg: *mut c_void) {
         return;
     };
     t.start_timer();
-    let mut c = Ctx { m, t };
+    let mut c = Ctx {
+        m,
+        t,
+        proto: t.proto(),
+    };
     loop {
         crate::stratum_task::round(&mut c, t.tag);
     }
@@ -1724,6 +1779,23 @@ mod tests {
             let _ = m.tasks[i].set(t);
         }
         m
+    }
+
+    #[test]
+    fn protocol_switches_between_connections() {
+        let t = Task::new(1, PoolConfig::load(1));
+        let v1 = t.proto();
+        assert!(!v1.is_v2());
+        // unchanged: the same transport and session
+        assert!(Arc::ptr_eq(&t.switch_protocol(false), &v1));
+        // v2: a new one; a submit holding the old one keeps it alive
+        let v2 = t.switch_protocol(true);
+        assert!(v2.is_v2() && Arc::ptr_eq(&t.proto(), &v2));
+        assert!(!v1.is_v2());
+        drop(v1);
+        // and back
+        assert!(!t.switch_protocol(false).is_v2());
+        assert!(!t.proto().is_v2());
     }
 
     #[test]
