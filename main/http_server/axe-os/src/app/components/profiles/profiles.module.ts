@@ -1,7 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { NbButtonModule, NbCheckboxModule, NbIconModule, NbInputModule, NbSelectModule } from '@nebular/theme';
+import { NbButtonModule, NbIconModule, NbInputModule, NbSelectModule, NbTooltipModule } from '@nebular/theme';
 import { TranslateModule } from '@ngx-translate/core';
 import { ProfilesComponent } from './profiles.component';
 
@@ -11,10 +11,10 @@ import { ProfilesComponent } from './profiles.component';
     CommonModule,
     FormsModule,
     NbButtonModule,
-    NbCheckboxModule,
     NbIconModule,
     NbInputModule,
     NbSelectModule,
+    NbTooltipModule,
     TranslateModule,
   ],
   exports: [ProfilesComponent],
