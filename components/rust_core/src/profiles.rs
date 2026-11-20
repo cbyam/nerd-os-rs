@@ -37,8 +37,9 @@ pub const KEYS: [&str; 5] = [
 const FAN_KEYS: [&str; 3] = ["mode", "manualSpeed", "overheatTemp"];
 const PID_KEYS: [&str; 4] = ["targetTemp", "p", "i", "d"];
 
-/// The config key of the profile last applied (none: absent).
+/// The config key of the profile last applied (none: absent or [`NONE`]).
 const ACTIVE_KEY: &[u8] = b"profile_act";
+const NONE: u16 = 0xffff;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Profile {
@@ -236,6 +237,13 @@ pub fn to_json(list: &[Profile], active: Option<usize>) -> Json {
     ])
 }
 
+/// Where the profile last applied (`old[active]`) is in `new`: the same
+/// name and settings; None if it was deleted or changed.
+pub fn moved(old: &[Profile], active: Option<usize>, new: &[Profile]) -> Option<usize> {
+    let p = old.get(active?)?;
+    new.iter().position(|n| n == p)
+}
+
 /// The index of the profile last applied, if it still exists.
 pub fn active(count: usize) -> Option<usize> {
     if !config::has(ACTIVE_KEY) {
@@ -312,13 +320,21 @@ pub fn list() -> (Vec<Profile>, Option<usize>) {
     with(|l| (l.clone(), active(l.len())))
 }
 
-/// Replaces the profiles; false if they could not be saved.
+/// Replaces the profiles; false if they could not be saved. The profile
+/// last applied stays marked where it moved to, or is unmarked if it was
+/// deleted or changed.
 pub fn store(new: Vec<Profile>) -> bool {
     with(|l| {
         if !nvs::write(&serialize(&new)) {
             return false;
         }
         log!(Info, TAG, "{} profile(s) saved", new.len());
+        let active = moved(l, active(l.len()), &new);
+        if config::has(ACTIVE_KEY) {
+            let v = active.map_or(NONE, |i| i as u16);
+            config::set(ACTIVE_KEY, Json::Num(Num::U(v as u64)));
+            crate::config_nvs::request_flush();
+        }
         *l = new;
         true
     })
@@ -492,6 +508,26 @@ mod tests {
             );
         }
         assert_eq!(p(r#"{"profiles":[]}"#), Ok(vec![]));
+    }
+
+    #[test]
+    fn the_active_mark_follows_its_profile() {
+        let p = |n: &str, f: u64| Profile {
+            name: n.into(),
+            settings: Json::Obj(vec![(b"frequency".to_vec(), Json::Num(Num::U(f)))]),
+        };
+        let old = [p("a", 1), p("b", 2), p("c", 3)];
+        // a profile before it deleted: it moves up
+        assert_eq!(moved(&old, Some(2), &[p("a", 1), p("c", 3)]), Some(1));
+        // the active one deleted: nothing is marked, not its successor
+        assert_eq!(moved(&old, Some(0), &[p("b", 2), p("c", 3)]), None);
+        // the active one changed: no longer what was applied
+        assert_eq!(
+            moved(&old, Some(1), &[p("a", 1), p("b", 9), p("c", 3)]),
+            None
+        );
+        assert_eq!(moved(&old, Some(1), &[]), None);
+        assert_eq!(moved(&old, None, &old), None);
     }
 
     #[test]
