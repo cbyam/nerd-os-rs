@@ -14,6 +14,7 @@ import { environment } from '../../environments/environment';
 import { IInfluxDB } from '../models/IInfluxDB';
 import { IUpdateStatus } from '../models/IUpdateStatus';
 import { HttpHeaders } from '@angular/common/http';
+import { IProfile, IProfiles } from '../models/IProfiles';
 
 const defaultInfo: ISystemInfo = {
   flipscreen: 0,
@@ -224,6 +225,23 @@ export class SystemService {
     let headers = new HttpHeaders();
     if (totp) headers = headers.set('X-TOTP', totp);
     return this.httpClient.patch(`${uri}/api/v2/settings`, update, { headers });
+  }
+
+  public getProfiles(uri: string = ''): Observable<IProfiles> {
+    return this.httpClient.get<IProfiles>(`${uri}/api/v2/profiles`);
+  }
+
+  /** Replaces all profiles (needs OTP when enabled). */
+  public updateProfiles(profiles: IProfile[], totp?: string, uri: string = ''): Observable<IProfiles> {
+    let headers = new HttpHeaders();
+    if (totp) headers = headers.set('X-TOTP', totp);
+    const body = { profiles: profiles.map(p => ({ name: p.name, settings: p.settings })) };
+    return this.httpClient.patch<IProfiles>(`${uri}/api/v2/profiles`, body, { headers });
+  }
+
+  /** Applies a stored profile (no OTP). */
+  public applyProfile(id: number, uri: string = ''): Observable<{ id: number; name: string }> {
+    return this.httpClient.post<{ id: number; name: string }>(`${uri}/api/v2/profiles/apply`, { id });
   }
 
   public scanWifi(): Observable<{ networks: { ssid: string; rssi: number; authmode: number }[] }> {

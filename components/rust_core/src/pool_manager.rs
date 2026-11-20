@@ -1866,6 +1866,7 @@ mod tests {
         let _g = crate::config::tests::LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        let _j = crate::jobs::test_support::fresh();
         let m = manager(false);
         m.initialized.store(true, Release);
         let (t0, t1) = (m.task(0).unwrap(), m.task(1).unwrap());
@@ -1903,6 +1904,8 @@ mod tests {
 
     #[test]
     fn protocol_switches_between_connections() {
+        // the switch drops the pool's jobs: the job tables are shared
+        let _j = crate::jobs::test_support::fresh();
         let t = Task::new(1, PoolConfig::load(1));
         let v1 = t.proto();
         assert!(!v1.is_v2());

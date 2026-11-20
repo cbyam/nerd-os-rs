@@ -1,0 +1,83 @@
+<p class="text-hint">{{ 'PROFILES.DESCRIPTION' | translate }}</p>
+
+<div *ngIf="loaded && !profiles.length && editing === null" class="text-hint empty">
+  {{ 'PROFILES.NONE' | translate }}
+</div>
+
+<div class="profile-row" *ngFor="let p of profiles; let i = index">
+  <div class="profile-info">
+    <div class="profile-name">
+      <strong>{{ p.name }}</strong>
+      <span class="active-badge" *ngIf="active === i">{{ 'PROFILES.ACTIVE' | translate }}</span>
+    </div>
+    <small class="text-hint">#{{ i }} · {{ summary(p) || ('PROFILES.EMPTY' | translate) }}</small>
+  </div>
+  <div class="profile-actions">
+    <button nbButton size="small" status="primary" (click)="apply(i)" [disabled]="editing !== null">
+      {{ 'PROFILES.APPLY' | translate }}
+    </button>
+    <button nbButton size="small" ghost (click)="edit(i)" [disabled]="editing !== null">
+      <nb-icon icon="edit-outline"></nb-icon>
+    </button>
+    <button nbButton size="small" ghost status="danger" (click)="remove(i)" [disabled]="editing !== null">
+      <nb-icon icon="trash-2-outline"></nb-icon>
+    </button>
+  </div>
+</div>
+
+<div class="profile-editor" *ngIf="editing !== null">
+  <div class="form-row">
+    <label class="form-label">{{ 'PROFILES.NAME' | translate }}:</label>
+    <input nbInput fullWidth maxlength="32" [(ngModel)]="form.name" placeholder="OC / Normal / Eco" />
+  </div>
+
+  <div class="form-row">
+    <nb-checkbox [(ngModel)]="form.useAsic">{{ 'PROFILES.INCLUDE_ASIC' | translate }}</nb-checkbox>
+  </div>
+  <div class="form-row indent" *ngIf="form.useAsic">
+    <label class="form-label">{{ 'PROFILES.FREQUENCY' | translate }} (MHz):</label>
+    <input nbInput type="number" min="1" [(ngModel)]="form.frequency" />
+    <label class="form-label">{{ 'PROFILES.CORE_VOLTAGE' | translate }} (mV):</label>
+    <input nbInput type="number" min="1" [(ngModel)]="form.coreVoltage" />
+  </div>
+
+  <div class="form-row">
+    <nb-checkbox [(ngModel)]="form.usePool">{{ 'PROFILES.INCLUDE_POOL' | translate }}</nb-checkbox>
+  </div>
+  <div class="form-row indent" *ngIf="form.usePool">
+    <nb-select [(ngModel)]="form.poolMode">
+      <nb-option [value]="0">{{ 'SETTINGS.POOL_MODE_FAILOVER' | translate }}</nb-option>
+      <nb-option [value]="1">{{ 'SETTINGS.POOL_MODE_DUAL' | translate }}</nb-option>
+    </nb-select>
+    <ng-container *ngIf="form.poolMode === 1">
+      <label class="form-label">
+        {{ 'SETTINGS.POOL_BALANCE' | translate }} ({{ form.poolBalance }}% / {{ 100 - form.poolBalance }}%)
+      </label>
+      <input type="range" min="1" max="99" step="1" [(ngModel)]="form.poolBalance" />
+    </ng-container>
+  </div>
+
+  <div class="form-row">
+    <nb-checkbox [(ngModel)]="form.useFans">{{ 'PROFILES.INCLUDE_FANS' | translate }}</nb-checkbox>
+  </div>
+
+  <div class="editor-actions">
+    <button nbButton size="small" ghost (click)="fillFromCurrent()">{{ 'PROFILES.FROM_CURRENT' | translate }}</button>
+    <span class="spacer"></span>
+    <button nbButton size="small" ghost (click)="cancel()">{{ 'PROFILES.CANCEL' | translate }}</button>
+    <button nbButton size="small" status="primary" (click)="save()" [disabled]="!form.name.trim()">
+      {{ 'PROFILES.SAVE' | translate }}
+    </button>
+  </div>
+</div>
+
+<div class="footer-row">
+  <button nbButton size="small" status="basic" (click)="add()" [disabled]="!canAdd">
+    <nb-icon icon="plus-outline"></nb-icon> {{ 'PROFILES.ADD' | translate }} ({{ profiles.length }}/{{ max }})
+  </button>
+</div>
+
+<small class="text-hint api-hint">
+  {{ 'PROFILES.API_HINT' | translate }}
+  <code>POST /api/v2/profiles/apply {{ '{' }}"id": 0{{ '}' }}</code>
+</small>

@@ -355,6 +355,11 @@ unsafe fn register_routes(ctx: *mut ServerCtx) {
                     Handler::CanSlavePatch => Some(crate::http_can::patch as httpd::HandlerFn),
                     Handler::CanSlaveDelete => Some(crate::http_can::delete as httpd::HandlerFn),
                     Handler::WifiScan => Some(crate::http_handlers::wifi_scan as httpd::HandlerFn),
+                    Handler::ProfilesGet => Some(crate::profiles::http::get as httpd::HandlerFn),
+                    Handler::ProfilesPatch => {
+                        Some(crate::profiles::http::patch as httpd::HandlerFn)
+                    }
+                    Handler::ProfileApply => Some(crate::profiles::http::apply as httpd::HandlerFn),
                     Handler::OtaGithubPost => {
                         Some(crate::ota_factory_task::post_handler as httpd::HandlerFn)
                     }
@@ -417,7 +422,7 @@ pub fn start() -> EspErr {
 
     let mut config = httpd::default_config();
     config.uri_match_fn = Some(httpd::httpd_uri_match_wildcard);
-    config.max_uri_handlers = 50;
+    config.max_uri_handlers = 56;
     config.lru_purge_enable = true;
     config.max_open_sockets = 10;
     config.stack_size = 12288;
