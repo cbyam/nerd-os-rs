@@ -437,6 +437,31 @@ pub(crate) mod ffi {
         })
     }
 
+    /// Switches between failover and dual pool mode (a new policy state in
+    /// the new mode); true if the mode changed.
+    ///
+    /// # Safety
+    /// `p` valid.
+    pub unsafe extern "C" fn pool_policy_set_mode(
+        p: *const Handle,
+        dual: bool,
+        balance: u16,
+    ) -> bool {
+        (*p).with(|policy| {
+            if matches!(policy, Policy::Dual(_)) == dual {
+                return false;
+            }
+            *policy = if dual {
+                let mut d = DualPool::default();
+                d.set_balance(balance);
+                Policy::Dual(d)
+            } else {
+                Policy::Failover(Failover::default())
+            };
+            true
+        })
+    }
+
     /// Dual pool: true if the balance changed. Failover: false.
     ///
     /// # Safety
@@ -588,6 +613,23 @@ mod tests {
         assert_eq!(picks.iter().filter(|&&p| p == SECONDARY).count(), 2);
         assert_eq!(d.next_active_pool([false, true]), SECONDARY);
         assert_eq!(d.next_active_pool([false, false]), PRIMARY);
+    }
+
+    #[test]
+    fn mode_switch_starts_a_new_policy() {
+        use ffi::*;
+        let p = pool_policy_new(false);
+        unsafe {
+            assert!(!pool_policy_set_mode(p, false, 50));
+            assert!(!pool_policy_set_balance(p, 70));
+            assert!(pool_policy_set_mode(p, true, 70));
+            // dual, already at the balance it was switched with
+            assert!(!pool_policy_set_balance(p, 70));
+            assert!(pool_policy_accepts_notify_from(p, 1));
+            assert!(pool_policy_set_mode(p, false, 70));
+            assert!(!pool_policy_accepts_notify_from(p, 1));
+            drop(Box::from_raw(p));
+        }
     }
 
     #[test]

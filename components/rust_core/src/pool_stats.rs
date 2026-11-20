@@ -175,6 +175,24 @@ impl PoolStats {
         }
     }
 
+    /// Switches between failover (one shared set of counters) and dual pool
+    /// mode: the session counters start over, the all-time values, the
+    /// found blocks and the time of the last share response are kept.
+    pub fn set_mode(&mut self, mode: Mode) {
+        if mode == self.mode {
+            return;
+        }
+        self.mode = mode;
+        self.s = Stats {
+            total_best: self.s.total_best,
+            found_blocks: self.s.found_blocks,
+            total_found_blocks: self.s.total_found_blocks,
+            last_response_us: self.s.last_response_us,
+            balance: self.s.balance,
+            ..Default::default()
+        };
+    }
+
     pub fn reset_session(&mut self) {
         self.reset_pool(0);
         self.reset_pool(1);
@@ -344,6 +362,13 @@ pub(crate) mod ffi {
 
     /// # Safety
     /// See above.
+    pub unsafe extern "C" fn pool_stats_set_mode(h: *const Handle, dual: bool) {
+        let mode = if dual { Mode::Dual } else { Mode::Failover };
+        (*h).with(|s| s.set_mode(mode))
+    }
+
+    /// # Safety
+    /// See above.
     pub unsafe extern "C" fn pool_stats_reset_session(h: *const Handle) {
         (*h).with(PoolStats::reset_session)
     }
@@ -434,6 +459,25 @@ mod tests {
         assert_eq!(p.pool_difficulty(), 200);
         p.reset_pool(1);
         assert_eq!((p.stats().accepted, p.accepted()), ([1, 0], 1));
+    }
+
+    #[test]
+    fn mode_switch_restarts_the_session_counters() {
+        let mut p = PoolStats::new(Mode::Failover, 5000, 2);
+        p.share_result(0, true, 7);
+        p.found_block(1e12, NBITS);
+        let found = p.stats().found_blocks;
+        p.set_balance(70);
+        p.set_mode(Mode::Failover); // unchanged: nothing reset
+        assert_eq!(p.accepted(), 1);
+        p.set_mode(Mode::Dual);
+        p.share_result(1, true, 9);
+        let s = p.stats();
+        assert_eq!((s.accepted, p.accepted()), ([0, 1], 1));
+        assert_eq!((s.total_best, s.found_blocks, s.balance), (5000, found, 70));
+        assert_eq!(s.last_response_us, 9);
+        p.set_mode(Mode::Failover);
+        assert_eq!((p.accepted(), p.stats().last_response_us), (0, 9));
     }
 
     #[test]
