@@ -142,8 +142,12 @@ export class EditComponent implements OnInit {
       if (id) this.scrollToSectionWhenReady(id);
     });
 
-    this.systemService.getSettingsV2(this.uri)
+    this.loadSettings();
+  }
 
+  /** Loads the device's settings into the form (again after a profile was applied). */
+  public loadSettings(): void {
+    this.systemService.getSettingsV2(this.uri)
       .pipe(this.loadingService.lockUIUntilComplete())
       .subscribe((info: ISettingsV2) => {
         this.originalSettings = structuredClone(info);

@@ -604,29 +604,20 @@
     "COINBASE_RECONNECT_HINT": "Saving will briefly disconnect and reconnect to the pool to apply the new settings."
   },
   "PROFILES": {
-    "TITLE": "Profiles",
-    "DESCRIPTION": "Named sets of settings to switch between, e.g. overclocked while the solar system has a surplus. A profile only changes the settings it includes; switching takes effect without a restart.",
-    "NONE": "No profiles yet.",
-    "EMPTY": "no settings",
+    "TITLE": "Profile",
+    "NONE": "No profiles",
     "ACTIVE": "active",
     "APPLY": "Apply",
-    "ADD": "Add profile",
-    "NAME": "Name",
-    "INCLUDE_ASIC": "Frequency and core voltage",
-    "FREQUENCY": "Frequency",
-    "CORE_VOLTAGE": "Core voltage",
-    "INCLUDE_POOL": "Pool mode",
-    "INCLUDE_FANS": "Fan settings (the current ones)",
-    "FROM_CURRENT": "Take current values",
+    "ADD_HINT": "Save the current settings as a new profile",
+    "DELETE": "Delete profile",
+    "NAME": "Profile name",
     "CANCEL": "Cancel",
     "SAVE": "Save",
-    "SAVED": "Profiles saved",
+    "SAVED": "Profile saved",
+    "DELETED": "Profile deleted",
     "SAVE_FAILED": "Saving the profiles failed",
     "APPLIED": "Profile \"{{name}}\" applied",
     "APPLY_FAILED": "Applying the profile failed",
-    "FAILOVER": "Failover",
-    "DUAL": "Dual pool",
-    "FANS": "fans",
-    "API_HINT": "Home automation (no OTP needed):"
+    "HELP": "A profile stores frequency, core voltage, pool mode and balance, and the fan settings. \"+\" saves the current settings as a new profile; applying one takes effect without a restart. Home automation (no OTP): POST /api/v2/profiles/apply {\"id\": n}"
   }
 }

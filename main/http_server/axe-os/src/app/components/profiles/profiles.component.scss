@@ -1,81 +1,24 @@
-.profile-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--card-divider-color);
-  flex-wrap: wrap;
-}
-
-.profile-info {
-  min-width: 0;
-  flex: 1 1 12rem;
-}
-
-.profile-name {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.active-badge {
-  font-size: 0.7rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 0.25rem;
-  background: var(--color-success-500, #00d68f);
-  color: #fff;
-}
-
-.profile-actions {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.profile-editor {
-  margin-top: 1rem;
-  padding: 1rem;
-  border: 1px solid var(--card-divider-color);
-  border-radius: 0.25rem;
-}
-
-.form-row {
+.profiles-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 
-  &.indent {
-    padding-left: 1.75rem;
+  .form-label {
+    margin: 0;
   }
 
-  input[type='number'] {
-    width: 8rem;
+  .profile-select {
+    min-width: 12rem;
   }
-}
 
-.editor-actions,
-.footer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-
-  .spacer {
-    flex: 1;
+  input {
+    max-width: 14rem;
   }
-}
 
-.empty {
-  margin: 0.5rem 0;
-}
-
-.api-hint {
-  display: block;
-  margin-top: 1rem;
-
-  code {
-    white-space: nowrap;
+  .info {
+    cursor: help;
+    opacity: 0.7;
   }
 }

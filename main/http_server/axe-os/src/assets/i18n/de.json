@@ -604,29 +604,20 @@
     "COINBASE_RECONNECT_HINT": "Beim Speichern wird die Verbindung zum Pool kurz getrennt und neu aufgebaut, um die neuen Einstellungen zu übernehmen."
   },
   "PROFILES": {
-    "TITLE": "Profile",
-    "DESCRIPTION": "Benannte Einstellungs-Sets zum Umschalten, z. B. übertaktet, solange die PV-Anlage Überschuss hat. Ein Profil ändert nur die Einstellungen, die es enthält; der Wechsel wirkt ohne Neustart.",
-    "NONE": "Noch keine Profile.",
-    "EMPTY": "keine Einstellungen",
+    "TITLE": "Profil",
+    "NONE": "Keine Profile",
     "ACTIVE": "aktiv",
     "APPLY": "Anwenden",
-    "ADD": "Profil hinzufügen",
-    "NAME": "Name",
-    "INCLUDE_ASIC": "Frequenz und Kernspannung",
-    "FREQUENCY": "Frequenz",
-    "CORE_VOLTAGE": "Kernspannung",
-    "INCLUDE_POOL": "Pool-Modus",
-    "INCLUDE_FANS": "Lüftereinstellungen (die aktuellen)",
-    "FROM_CURRENT": "Aktuelle Werte übernehmen",
+    "ADD_HINT": "Aktuelle Einstellungen als neues Profil speichern",
+    "DELETE": "Profil löschen",
+    "NAME": "Profilname",
     "CANCEL": "Abbrechen",
     "SAVE": "Speichern",
-    "SAVED": "Profile gespeichert",
+    "SAVED": "Profil gespeichert",
+    "DELETED": "Profil gelöscht",
     "SAVE_FAILED": "Speichern der Profile fehlgeschlagen",
     "APPLIED": "Profil \"{{name}}\" angewendet",
     "APPLY_FAILED": "Anwenden des Profils fehlgeschlagen",
-    "FAILOVER": "Failover",
-    "DUAL": "Dual-Pool",
-    "FANS": "Lüfter",
-    "API_HINT": "Hausautomation (ohne OTP):"
+    "HELP": "Ein Profil speichert Frequenz, Kernspannung, Pool-Modus und Balance sowie die Lüftereinstellungen. \"+\" speichert die aktuellen Einstellungen als neues Profil; das Anwenden wirkt ohne Neustart. Hausautomation (ohne OTP): POST /api/v2/profiles/apply {\"id\": n}"
   }
 }

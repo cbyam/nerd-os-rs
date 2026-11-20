@@ -9,15 +9,8 @@ Web-UI: {{ currentWebVersion }}<br/>
 <nb-card>
   <nb-card-header>{{ 'SETTINGS.TITLE' | translate }}</nb-card-header>
   <nb-card-body>
-    <app-edit></app-edit>
-  </nb-card-body>
-</nb-card>
-
-<!-- Profiles Card -->
-<nb-card>
-  <nb-card-header>{{ 'PROFILES.TITLE' | translate }}</nb-card-header>
-  <nb-card-body>
-    <app-profiles></app-profiles>
+    <app-profiles (applied)="edit.loadSettings()"></app-profiles>
+    <app-edit #edit></app-edit>
   </nb-card-body>
 </nb-card>
 
