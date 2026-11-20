@@ -24,7 +24,8 @@ export class ProfilesComponent implements OnInit {
   public profiles: IProfile[] = [];
   public max = 5;
   public active: number | null = null;
-  public selected: number | null = null;
+  /** the profile shown in the dropdown (an entry of `profiles`) */
+  public selected: IProfile | null = null;
 
   /** the name input of "+" is open */
   public adding = false;
@@ -41,13 +42,25 @@ export class ProfilesComponent implements OnInit {
     this.system.getProfiles().subscribe({ next: p => this.set(p), error: () => { } });
   }
 
-  private set(p: IProfiles): void {
+  /** Takes a new list; keeps the selection if that profile is still there,
+   * else selects the active one (or the first). */
+  private set(p: IProfiles, select?: number): void {
+    const prev = this.selected;
     this.profiles = p.profiles ?? [];
     this.max = p.max ?? 5;
     this.active = p.active ?? null;
-    if (this.selected === null || this.selected >= this.profiles.length) {
-      this.selected = this.active ?? (this.profiles.length ? 0 : null);
-    }
+    const same = (a: IProfile, b: IProfile) =>
+      a.name === b.name && JSON.stringify(a.settings) === JSON.stringify(b.settings);
+    this.selected =
+      (select !== undefined ? this.profiles[select] : undefined)
+      ?? (prev ? this.profiles.find(q => same(q, prev)) : undefined)
+      ?? (this.active !== null ? this.profiles[this.active] : undefined)
+      ?? this.profiles[0]
+      ?? null;
+  }
+
+  private get selectedIndex(): number {
+    return this.selected ? this.profiles.indexOf(this.selected) : -1;
   }
 
   public get canAdd(): boolean {
@@ -82,8 +95,7 @@ export class ProfilesComponent implements OnInit {
       }),
     ).subscribe({
       next: p => {
-        this.set(p);
-        this.selected = this.profiles.length - 1;
+        this.set(p, (p.profiles?.length ?? 1) - 1);
         this.adding = false;
         this.toastr.success(this.translate.instant('PROFILES.SAVED'), this.translate.instant('COMMON.SUCCESS'));
       },
@@ -92,8 +104,8 @@ export class ProfilesComponent implements OnInit {
   }
 
   public remove(): void {
-    if (this.selected === null) return;
-    const i = this.selected;
+    const i = this.selectedIndex;
+    if (i < 0) return;
     const list = this.profiles.filter((_, j) => j !== i);
     this.store$(list).subscribe({
       next: p => {
@@ -121,8 +133,9 @@ export class ProfilesComponent implements OnInit {
   }
 
   public apply(): void {
-    if (this.selected === null) return;
-    this.system.applyProfile(this.selected).subscribe({
+    const i = this.selectedIndex;
+    if (i < 0) return;
+    this.system.applyProfile(i).subscribe({
       next: r => {
         this.active = r.id;
         this.applied.emit(r.id);

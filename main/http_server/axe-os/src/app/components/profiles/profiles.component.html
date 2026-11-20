@@ -2,7 +2,7 @@
   <ng-container *ngIf="!adding">
     <nb-select size="small" class="profile-select" [(selected)]="selected"
       [placeholder]="'PROFILES.NONE' | translate" [disabled]="!profiles.length">
-      <nb-option *ngFor="let p of profiles; let i = index" [value]="i">
+      <nb-option *ngFor="let p of profiles; let i = index" [value]="p">
         {{ p.name }}<span *ngIf="active === i">&nbsp;({{ 'PROFILES.ACTIVE' | translate }})</span>
       </nb-option>
     </nb-select>
