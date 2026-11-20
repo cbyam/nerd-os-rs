@@ -41,6 +41,12 @@
                 </div>
             </nb-card-body>
         </nb-card>
+        <nb-card id="cfg-profiles">
+            <nb-card-header>{{ 'PROFILES.HEADER' | translate }}</nb-card-header>
+            <nb-card-body>
+                <app-profiles (applied)="loadSettings()"></app-profiles>
+            </nb-card-body>
+        </nb-card>
         <nb-card id="cfg-pool">
             <nb-card-header>
             <div class="d-flex align-items-center justify-content-between">

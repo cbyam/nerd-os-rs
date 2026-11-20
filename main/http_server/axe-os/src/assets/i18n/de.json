@@ -618,6 +618,7 @@
     "SAVE_FAILED": "Speichern der Profile fehlgeschlagen",
     "APPLIED": "Profil \"{{name}}\" angewendet",
     "APPLY_FAILED": "Anwenden des Profils fehlgeschlagen",
-    "HELP": "Ein Profil speichert Frequenz, Kernspannung, Pool-Modus und Balance sowie die Lüftereinstellungen. \"+\" speichert die aktuellen Einstellungen als neues Profil; das Anwenden wirkt ohne Neustart. Hausautomation (ohne OTP): POST /api/v2/profiles/apply {\"id\": n}"
+    "HELP": "Ein Profil speichert Frequenz, Kernspannung, Pool-Modus und Balance sowie die Lüftereinstellungen. \"+\" speichert die aktuellen Einstellungen als neues Profil; das Anwenden wirkt ohne Neustart. Hausautomation (ohne OTP): POST /api/v2/profiles/apply {\"id\": n}",
+    "HEADER": "Profile"
   }
 }

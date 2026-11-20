@@ -7,6 +7,7 @@ import { AdvancedToggleModule } from '../../components/advanced-toggle/advanced-
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { AlertBannerModule } from 'src/app/components/alert-banner/alert-banner.module';
+import { ProfilesModule } from 'src/app/components/profiles/profiles.module';
 
 @NgModule({
   declarations: [EditComponent],
@@ -24,6 +25,7 @@ import { AlertBannerModule } from 'src/app/components/alert-banner/alert-banner.
     FormsModule,
     TranslateModule,
     AlertBannerModule,
+    ProfilesModule,
     NbTooltipModule,
   ],
   exports: [EditComponent]

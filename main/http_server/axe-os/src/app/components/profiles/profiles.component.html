@@ -1,6 +1,4 @@
 <div class="profiles-row">
-  <label class="form-label">{{ 'PROFILES.TITLE' | translate }}:</label>
-
   <ng-container *ngIf="!adding">
     <nb-select size="small" class="profile-select" [(selected)]="selected"
       [placeholder]="'PROFILES.NONE' | translate" [disabled]="!profiles.length">
@@ -8,14 +6,14 @@
         {{ p.name }}<span *ngIf="active === i">&nbsp;({{ 'PROFILES.ACTIVE' | translate }})</span>
       </nb-option>
     </nb-select>
-    <button nbButton size="small" status="primary" (click)="apply()" [disabled]="selected === null">
+    <button type="button" nbButton size="small" status="primary" (click)="apply()" [disabled]="selected === null">
       {{ 'PROFILES.APPLY' | translate }}
     </button>
-    <button nbButton size="small" ghost (click)="startAdd()" [disabled]="!canAdd"
+    <button type="button" nbButton size="small" ghost (click)="startAdd()" [disabled]="!canAdd"
       [nbTooltip]="'PROFILES.ADD_HINT' | translate">
       <nb-icon icon="plus-outline"></nb-icon>
     </button>
-    <button nbButton size="small" ghost status="danger" (click)="remove()" [disabled]="selected === null"
+    <button type="button" nbButton size="small" ghost status="danger" (click)="remove()" [disabled]="selected === null"
       [nbTooltip]="'PROFILES.DELETE' | translate">
       <nb-icon icon="trash-2-outline"></nb-icon>
     </button>
@@ -24,10 +22,10 @@
   <ng-container *ngIf="adding">
     <input nbInput fieldSize="small" maxlength="32" [(ngModel)]="newName"
       [placeholder]="'PROFILES.NAME' | translate" (keyup.enter)="add()" />
-    <button nbButton size="small" status="primary" (click)="add()" [disabled]="!newName.trim()">
+    <button type="button" nbButton size="small" status="primary" (click)="add()" [disabled]="!newName.trim()">
       {{ 'PROFILES.SAVE' | translate }}
     </button>
-    <button nbButton size="small" ghost (click)="adding = false">
+    <button type="button" nbButton size="small" ghost (click)="adding = false">
       {{ 'PROFILES.CANCEL' | translate }}
     </button>
   </ng-container>
