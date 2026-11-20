@@ -138,7 +138,7 @@ export class EditComponent implements OnInit {
     // the matching config card once the (async-loaded) form has rendered.
     this.route.queryParams.subscribe(params => {
       const section = params['section'];
-      const id = section === 'pool' ? 'cfg-pool' : section === 'asic' ? 'cfg-asic' : null;
+      const id = section === 'pool' ? 'cfg-pool' : section === 'asic' ? 'cfg-profiles' : null;
       if (id) this.scrollToSectionWhenReady(id);
     });
 
