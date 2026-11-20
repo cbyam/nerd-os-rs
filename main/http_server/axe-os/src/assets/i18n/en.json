@@ -139,6 +139,8 @@
     "POOL_SETTINGS": "Pool Settings",
     "WIFI_SETTINGS": "WiFi Settings",
     "MINING_SETTINGS": "Mining Settings",
+    "ASIC_SETTINGS": "ASIC Settings",
+    "ADVANCED_MINING_SETTINGS": "Advanced Mining Settings",
     "HARDWARE_SETTINGS": "Hardware Settings",
     "STRATUM_URL": "Stratum URL",
     "STRATUM_HOST": "Stratum Host",
@@ -618,7 +620,6 @@
     "SAVE_FAILED": "Saving the profiles failed",
     "APPLIED": "Profile \"{{name}}\" applied",
     "APPLY_FAILED": "Applying the profile failed",
-    "HELP": "A profile stores frequency, core voltage and the fan settings (not the pools). \"+\" saves the current settings as a new profile; applying one takes effect without a restart, e.g. faster with a solar surplus or quieter at night. Home automation (no OTP): POST /api/v2/profiles/apply {\"id\": n}",
-    "HEADER": "Profiles"
+    "HELP": "A profile stores frequency, core voltage and the fan settings (not the pools). \"+\" saves the current settings as a new profile; applying one takes effect without a restart, e.g. faster with a solar surplus or quieter at night. Home automation (no OTP): POST /api/v2/profiles/apply {\"id\": n}"
   }
 }

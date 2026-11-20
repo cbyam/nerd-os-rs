@@ -44,12 +44,12 @@
         <nb-card id="cfg-profiles" class="profile-box">
             <nb-card-header>
                 <div class="d-flex align-items-center justify-content-between flex-wrap profile-header">
-                    <div>{{ 'PROFILES.HEADER' | translate }}</div>
+                    <div>{{ 'SETTINGS.MINING_SETTINGS' | translate }}</div>
                     <app-profiles (applied)="loadSettings()"></app-profiles>
                 </div>
             </nb-card-header>
             <nb-card-body>
-                <h6 class="profile-section">{{ 'SETTINGS.MINING_SETTINGS' | translate }}</h6>
+                <h6 class="profile-section">{{ 'SETTINGS.ASIC_SETTINGS' | translate }}</h6>
                 <div class="d-flex justify-content-end"><app-advanced-toggle (advancedToggled)="setDevToolsOpen($event)"></app-advanced-toggle></div>
                 <ng-container *ngIf="supportLevel === 0">
                     <div class="form-row">
@@ -553,7 +553,7 @@
             </nb-tabset>
         </nb-card>
         <nb-card id="cfg-asic" *ngIf="supportLevel >= 1">
-            <nb-card-header>{{ 'SETTINGS.MINING_SETTINGS' | translate }}</nb-card-header>
+            <nb-card-header>{{ 'SETTINGS.ADVANCED_MINING_SETTINGS' | translate }}</nb-card-header>
             <nb-card-body>
                 <ng-container *ngIf="supportLevel >= 2">
                     <div class="form-row">
