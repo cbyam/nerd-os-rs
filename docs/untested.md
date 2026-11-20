@@ -133,6 +133,6 @@ Still to test:
 
 ## Settings profiles: the profile "default"
 
-On the first access to the profiles of a device that never had profiles (no `profiles` blob in NVS: a new device or one updated from v2.0.0-alpha.1 or the C firmware), the profile "default" is created from the current settings and marked active. Host-tested; on hardware only the other case is tested (a Q1373 whose list exists stays as it is, an emptied list stays empty).
+On the first access to the profiles of a device that never had profiles (no `profiles` blob in NVS: a new device or one updated from v2.0.0-alpha.1 or the C firmware), the profile "default" is created from the current settings and marked active.
 
-Still to test: updating a device without profiles (e.g. a NerdQAxe++ on v2.0.0-alpha.1) and opening the settings page: "default" appears, marked active, with that device's frequency, voltage, pool mode and fans.
+Tested on hardware: a NerdQAxe++ updated over OTA from v2.0.0-alpha.1 got "default" (its 600 MHz / 1150 mV, failover without a balance, both fans) marked active; a Q1373 whose list exists kept it unchanged.
