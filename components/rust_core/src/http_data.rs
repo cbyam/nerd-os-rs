@@ -522,6 +522,12 @@ unsafe extern "C" fn dashboard(req: *mut Req) -> EspErr {
 
 unsafe extern "C" fn v2_settings_get(req: *mut Req) -> EspErr {
     set_json(req);
+    send_doc(req, v2_settings_doc())
+}
+
+/// The document of `GET /api/v2/settings` (also the source of the first
+/// settings profile).
+pub(crate) fn v2_settings_doc() -> crate::ajson::Json {
     let b = board();
     let version = CString::new(crate::mdns::fw_version()).unwrap_or_default();
     let urls = [cfg::stratum_url(0), cfg::stratum_url(1)];
@@ -531,7 +537,8 @@ unsafe extern "C" fn v2_settings_get(req: *mut Req) -> EspErr {
     let ssid = cfg::wifi_ssid();
     let mempool_url = cfg::mempool_url();
 
-    let mut v: V2Settings = core::mem::zeroed();
+    // SAFETY: a plain C struct, all-zero is a valid value
+    let mut v: V2Settings = unsafe { core::mem::zeroed() };
     v.asic_model = b.asic_model;
     v.device_model = b.device_model;
     v.version = version.as_ptr();
@@ -598,7 +605,7 @@ unsafe extern "C" fn v2_settings_get(req: *mut Req) -> EspErr {
     v.invert_screen = cfg::invert_screen();
     v.auto_screen_off = cfg::auto_screen_off();
 
-    send_doc(req, http_json::v2_settings(&v))
+    http_json::v2_settings(&v)
 }
 
 /// The same structure as `GET /api/v2/settings`, all fields optional; the
