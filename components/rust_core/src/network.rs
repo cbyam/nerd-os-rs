@@ -235,6 +235,65 @@ mod sys {
     pub fn set_default_netif(netif: *mut c_void) -> EspErr {
         unsafe { raw::esp_netif_set_default_netif(netif.cast()) }
     }
+    /// Makes the DNS servers of `netif` (from its DHCP lease) the global
+    /// resolver's: with WiFi and Ethernet registered, lwIP does not always
+    /// take the Ethernet lease's servers when WiFi never had one, and pool
+    /// host lookups fail. `public_fallback`: 8.8.8.8 / 1.1.1.1 for a slot
+    /// the lease left empty (Ethernet).
+    pub fn apply_dns(netif: *mut c_void, public_fallback: bool) {
+        let slots = [
+            (raw::esp_netif_dns_type_t_ESP_NETIF_DNS_MAIN, [8u8, 8, 8, 8]),
+            (raw::esp_netif_dns_type_t_ESP_NETIF_DNS_BACKUP, [1, 1, 1, 1]),
+        ];
+        for (ty, fallback) in slots {
+            let mut info = raw::esp_netif_dns_info_t::default();
+            // SAFETY: an IPv4 address is read only when the type says so
+            let current = unsafe {
+                raw::esp_netif_get_dns_info(netif.cast(), ty, &mut info) == ESP_OK
+                    && info.ip.type_ as u32 == raw::ESP_IPADDR_TYPE_V4
+                    && info.ip.u_addr.ip4.addr != 0
+            };
+            if current {
+                let a = unsafe { info.ip.u_addr.ip4.addr }.to_ne_bytes();
+                log!(
+                    Info,
+                    TAG_NET,
+                    "DNS[{ty}] from the active interface: {}.{}.{}.{}",
+                    a[0],
+                    a[1],
+                    a[2],
+                    a[3]
+                );
+            } else if public_fallback {
+                info = raw::esp_netif_dns_info_t::default();
+                info.ip.type_ = raw::ESP_IPADDR_TYPE_V4 as u8;
+                info.ip.u_addr.ip4.addr = u32::from_ne_bytes(fallback);
+                let a = fallback;
+                log!(
+                    Warn,
+                    TAG_NET,
+                    "ETH lease without DNS[{ty}], using {}.{}.{}.{}",
+                    a[0],
+                    a[1],
+                    a[2],
+                    a[3]
+                );
+            } else {
+                continue;
+            }
+            // without CONFIG_ESP_NETIF_SET_DNS_PER_DEFAULT_NETIF this sets
+            // the global lwIP DNS server of the slot
+            let e = unsafe { raw::esp_netif_set_dns_info(netif.cast(), ty, &mut info) };
+            if e != ESP_OK {
+                log!(
+                    Warn,
+                    TAG_NET,
+                    "esp_netif_set_dns_info failed: {}",
+                    err_name(e)
+                );
+            }
+        }
+    }
     /// The address of an `IP_EVENT_STA_GOT_IP`.
     ///
     /// # Safety
@@ -329,6 +388,7 @@ mod sys {
     pub fn set_default_netif(_: *mut c_void) -> EspErr {
         ESP_OK
     }
+    pub fn apply_dns(_: *mut c_void, _: bool) {}
     pub unsafe fn got_ip(_: *mut c_void) -> [u8; 4] {
         [0; 4]
     }
@@ -736,6 +796,8 @@ fn on_event(ev: Event) {
                 err_name(e)
             );
         }
+        // NETMGR_ETH: the public servers as the fallback
+        sys::apply_dns(netif, preferred == 2);
     }
     // HOOK_ANY_IP: no one registers for it
     if a & nact::HOOK_PREFERRED != 0 {

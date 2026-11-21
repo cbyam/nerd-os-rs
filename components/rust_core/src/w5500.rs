@@ -151,13 +151,16 @@ mod sys {
         };
         unsafe { raw::esp_eth_mac_new_w5500(&w5500, &mac).cast() }
     }
-    /// The PHY driver: `ETH_PHY_DEFAULT_CONFIG()` (its reset GPIO 5).
+    /// The PHY driver: `ETH_PHY_DEFAULT_CONFIG()` without its reset GPIO.
+    /// The default (GPIO 5) is the LCD reset of the T-Display S3, and the
+    /// driver pulses it on init; the W5500 is reset before (hardware pin or
+    /// SPI soft reset), so the PHY driver gets no reset pin.
     pub fn phy_new() -> *mut c_void {
         let phy = raw::eth_phy_config_t {
             phy_addr: -1,
             reset_timeout_ms: 100,
             autonego_timeout_ms: 4000,
-            reset_gpio_num: 5,
+            reset_gpio_num: -1,
         };
         unsafe { raw::esp_eth_phy_new_w5500(&phy).cast() }
     }
