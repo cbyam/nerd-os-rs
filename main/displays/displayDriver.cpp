@@ -25,6 +25,7 @@
 
 #include "nvs_config.h"
 #include "displayDriver.h"
+#include "display_api.h"
 
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 
@@ -100,6 +101,8 @@ void DisplayDriver::lvglFlushCallback(lv_disp_drv_t* drv, const lv_area_t* area,
     int offsetx2 = area->x2;
     int offsety1 = area->y1;
     int offsety2 = area->y2;
+    // the development screenshot copy (a no-op in normal builds)
+    disp_shadow_flush(offsetx1, offsety1, offsetx2, offsety2, (const uint16_t *) colorMap);
     // Copy buffer content to the display
     esp_lcd_panel_draw_bitmap(panelHandle, offsetx1, offsety1, offsetx2 + 1, offsety2 + 1, colorMap);
 }
@@ -541,6 +544,10 @@ void DisplayDriver::processButtons(Button &btn1, Button &btn2, int64_t tnow,
 
     uint32_t evt1 = btn1.getEvent();
     uint32_t evt2 = btn2.getEvent();
+    // simulated short presses of the development build (always 0 otherwise)
+    uint32_t sim = disp_debug_take_press();
+    if (sim & 1) evt1 |= BTN_EVENT_SHORTPRESS;
+    if (sim & 2) evt2 |= BTN_EVENT_SHORTPRESS;
     bool bothPressed = (evt1 & BTN_EVENT_PRESSED) && (evt2 & BTN_EVENT_PRESSED);
     bool anyPressed = (evt1 & BTN_EVENT_PRESSED) || (evt2 & BTN_EVENT_PRESSED);
 
