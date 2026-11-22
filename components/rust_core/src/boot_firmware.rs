@@ -344,7 +344,7 @@ impl Hooks for Firmware {
     }
 
     fn start_system_tasks(&mut self) {
-        task(crate::system::api::system_task, c"SYSTEM_task", 4096, 3);
+        task(crate::system::api::system_task, c"SYSTEM_task", 6144, 3);
         task(
             crate::power_mgmt::api::pm_task,
             c"power mangement",

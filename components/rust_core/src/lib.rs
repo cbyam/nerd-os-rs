@@ -100,6 +100,7 @@ pub mod sdkconfig;
 pub mod secp;
 pub mod serial;
 pub mod settings_apply;
+pub mod stack_monitor;
 pub mod stratum_config;
 pub mod stratum_task;
 pub mod stratum_transport;

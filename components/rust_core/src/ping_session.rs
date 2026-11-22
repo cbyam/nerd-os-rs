@@ -221,6 +221,9 @@ unsafe extern "C" fn on_success(hdl: *mut c_void, args: *mut c_void) {
         seq.unwrap_or(s.replies as u32),
         ttl.unwrap_or(64)
     );
+    drop(s);
+    // the session's task lives too briefly for the minute check
+    crate::stack_monitor::check_current("ping");
 }
 
 fn sleep_ms(ms: u32) {
@@ -277,6 +280,10 @@ pub fn perform(pool: usize, ip: &str, host: &str) -> Round {
     };
 
     let mut hdl: *mut c_void = core::ptr::null_mut();
+    // the session's task exists only within this (stack_monitor.rs)
+    let lifetime = crate::stack_monitor::TASK_LIFETIME
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     // SAFETY: `config`/`cbs` are live locals that esp_ping_new_session copies; `hdl`
     // comes from a successful esp_ping_new_session and is deleted once at the end
     unsafe {
@@ -311,6 +318,7 @@ pub fn perform(pool: usize, ip: &str, host: &str) -> Round {
         sleep_ms(TIMEOUT_MS + 200);
         sys::esp_ping_delete_session(hdl);
     }
+    drop(lifetime);
 
     let s = REPLIES[pool].lock().unwrap_or_else(|e| e.into_inner());
     if s.replies > 0 {
