@@ -498,7 +498,10 @@
     "BEST_DIFF_FOUND": "Best difficulty found",
     "BEST_DIFF_FOUND_DESC": "triggers when the device finds a new best difficulty",
     "COINBASE_VERIFY_FAILED": "Coinbase verification failed",
-    "COINBASE_VERIFY_FAILED_DESC": "triggers when the pool's coinbase does not contain your address or exceeds the configured fee limit"
+    "COINBASE_VERIFY_FAILED_DESC": "triggers when the pool's coinbase does not contain your address or exceeds the configured fee limit",
+    "METRICS": "Metrics",
+    "METRICS_DESC": "sends hashrate, temperatures, power, shares and best difficulty regularly",
+    "METRICS_EVERY": "every {{hours}} h"
   },
   "LANGUAGE": {
     "TITLE": "Language / Langue",

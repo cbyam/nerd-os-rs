@@ -498,7 +498,10 @@
     "BEST_DIFF_FOUND": "Beste Schwierigkeit gefunden",
     "BEST_DIFF_FOUND_DESC": "wird ausgelöst, wenn das Gerät eine neue beste Schwierigkeit findet",
     "COINBASE_VERIFY_FAILED": "Coinbase-Verifizierung fehlgeschlagen",
-    "COINBASE_VERIFY_FAILED_DESC": "wird ausgelöst, wenn die Coinbase des Pools deine Adresse nicht enthält oder das konfigurierte Gebührenlimit überschreitet"
+    "COINBASE_VERIFY_FAILED_DESC": "wird ausgelöst, wenn die Coinbase des Pools deine Adresse nicht enthält oder das konfigurierte Gebührenlimit überschreitet",
+    "METRICS": "Metriken",
+    "METRICS_DESC": "sendet regelmäßig Hashrate, Temperaturen, Leistung, Shares und beste Schwierigkeit",
+    "METRICS_EVERY": "alle {{hours}} h"
   },
   "LANGUAGE": {
     "TITLE": "Sprache / Language",

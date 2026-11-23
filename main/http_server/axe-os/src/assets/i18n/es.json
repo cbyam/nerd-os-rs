@@ -496,7 +496,10 @@
     "BEST_DIFF_FOUND": "Mejor dificultad encontrada",
     "BEST_DIFF_FOUND_DESC": "se activa cuando el dispositivo encuentra una nueva mejor dificultad",
     "COINBASE_VERIFY_FAILED": "Verificación de coinbase fallida",
-    "COINBASE_VERIFY_FAILED_DESC": "se activa cuando la coinbase del pool no contiene tu dirección o excede el límite de comisión configurado"
+    "COINBASE_VERIFY_FAILED_DESC": "se activa cuando la coinbase del pool no contiene tu dirección o excede el límite de comisión configurado",
+    "METRICS": "Métricas",
+    "METRICS_DESC": "envía regularmente el hashrate, las temperaturas, la potencia, los shares y la mejor dificultad",
+    "METRICS_EVERY": "cada {{hours}} h"
   },
   "LANGUAGE": {
     "TITLE": "Idioma / Language",
